@@ -31,8 +31,13 @@ HERE = pathlib.Path(__file__).resolve().parent
 import fwtarget                                               # noqa: E402
 TARGET = fwtarget.target()
 IMAGE = HERE.parents[1] / ('out' if TARGET == 'fp' else f'out_{TARGET}') / 'MAIN_c0000000.bin'
-# The loader hook and Fast Start are refused for other cameras (build_autorun).
-HOOK_PATHS = TARGET == 'fp'
+# The loader hook and Fast Start are refused for other cameras (build_autorun)
+# unless FPSUP_FPL_FASTSTART_TEST=1, which this test sets for itself so the
+# hook paths are emulated against that camera's image before any card is.
+if TARGET != 'fp':
+    import os
+    os.environ['FPSUP_FPL_FASTSTART_TEST'] = '1'
+HOOK_PATHS = True
 
 try:
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE

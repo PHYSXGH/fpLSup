@@ -219,3 +219,51 @@ emulation or on the fp L.
 Open issue (USB shell on the fp L): after some idle time, or after the daemon is restarted, the worker
 sometimes stops answering until the USB cable is replugged. Seen 3 times; replugging fixed it every time.
 Once the camera did not enumerate at all after a power cycle until the cable was replugged.
+
+### Fast Start 3 / loader hook on the fp L: emulated, test card built (2026-11-02)
+
+- Hook site fp 0xC03DA420 → fp L 0xC03DA638: the same `bl` to the AutoRun starter (0xC03DA970), stock word
+  0xEB0000CC on both. The `\AutoRun.txt` string the firmware passes in r0 is at 0xC0BD2024 (`checked`).
+- `test_loader_hook` runs all 16 tests against the fp L image (warm hook, cold AutoRun, missing file,
+  foreign loader, abort, store seeding, power-off write-back). 7 of the 14 hook tests fail when the fp L build
+  is run against the fp image instead.
+- `FPSUP_FPL_FASTSTART_TEST=1` is the only way past the fp L refusal; the test sets it for itself.
+- card_check knows two derived values: the hook branch (fp `eb0d4e90`, fp L `eb0d44aa`, each to its own
+  loader+4) and the store magic (sha256 of each AutoRun's loader words: fp `5c502aa9`, fp L `5665eb93`).
+- `loader_hook_check.py` is camera-aware (fp L site, marker 0xC072BAC0, image `out_fpl/`).
+
+| card | AutoRun.txt | fpSup.BIN |
+|---|---|---|
+| `20261102-fast3-gyro-debug-TEST` (store-boot, loader-hook, four-box, mark 0xC072BAC0) | `1bfd1c39…` | `8fc095e5…` |
+| `20261102-fpl-recovery-noBIN` (AutoRun only: puts 0xEB0000CC back at 0xC03DA638) | `9356acb1…` | none |
+
+Note: unlike every card before it, the Fast Start card **writes the loader into the settings block** on its
+first boot (STORE = 0xC3075224, magic first). Removing the card does not clear that. To undo: the recovery card
+(hook back to stock), then `commonsave_probe.py restore` (store region to zero).
+
+### Fast Start test card on the camera (2026-11-02)
+
+1. First boot (slow path, battery pulled before): the user saw a normal boot. **USB never connected** (no
+   kernel event, port "not attached"), with two cables and two ports.
+   Without the card the camera connected at once (1-1.2, class 06).
+2. Cold start (battery out, card in → fast path): USB connected (1-1.2, class ff). Read:
+   store magic 0x5665eb93 (= this build), loader words follow; hook 0xC03DA638 armed → loader+4 (0xEB0D44AA);
+   loader+4 = hook entry; journal 6 entries, all = fp L stock words; runs=0 (image reloaded);
+   LOAD_DONE_US 2.54 s (the fp skill lists ~11–12 s for this path; not understood yet).
+Open: why USB did not come up after the first (slow, provisioning) boot.
+3. Warm restart (power switch, USB unplugged → instant path): the boxes appeared already filled (user).
+   LOAD_DONE_US 1.15 s; store magic intact; hook armed. The power-off run count was not read yet: the shell
+   went silent when the daemon was restarted within the same USB connection.
+   `loader_hook_check.py` now reads through its retrying `read()` (a lost reply had crashed it).
+
+Shell silence, refined: every time it happened, the daemon had been restarted while the cable stayed
+plugged in. The first daemon after a fresh plug-in has always answered. Workaround: replug after restarting
+the daemon. Likely cause: stopping the daemon mid-session leaves the camera's endpoint in a state the worker
+doesn't recover from. Not fixed.
+4. After a replug (no restart), one daemon: `loader_hook_check.py` (now retrying every read): hook armed,
+   loader+4 = hook entry, **power-off routine runs=1** (at 103.4 s of the previous boot = the warm restart),
+   journal **7 entries, all = fp L stock words**.
+
+All three paths work on the fp L: slow (stores the loader), fast 2.54 s, instant 1.15 s, and the power-off
+write-back runs. Fast Start stays refused for normal fp L builds until the open issue is understood:
+**USB did not connect after the first (slow, provisioning) boot**.

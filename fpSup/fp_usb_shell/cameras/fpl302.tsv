@@ -205,3 +205,5 @@
 0xc38d6fb0	-	todo	auto: guess 0xc38d6a70 by ptr(2)
 0xcfffffff	-	const	range bound, not an address
 0xc06ae9f8	0xc06ac538	auto	exact (crc32 end, tests)
+0xc0babdd8	0xc0bd2024	checked	the '\\AutoRun.txt' string the AutoRun starter is called with; same string at the fp L address, loaded at the hook site 0xC03DA62C
+0xc0420c20	0xc0420e38	auto	exact (AutoRun interpreter, used by test_loader_hook)

@@ -42,7 +42,26 @@ def bl_target(w, at):
     return None
 
 problems = []
+DERIVED = set()          # (fp value, fp L value) pairs computed below, not translated
+
+
+def _bl(site, target):
+    return 0xEB000000 | (((target - (site + 8)) >> 2) & 0xFFFFFF)
+
+
+def _store_magic(autorun, cave_low):
+    """build_autorun's STORE_MAGIC: sha256 of the loader words AutoRun spells
+    into the cave, first four bytes big-endian."""
+    import hashlib
+    sets = [(int(a, 16), int(v, 16)) for a, v in
+            re.findall(r'^mem set (0x[0-9A-Fa-f]+) (0x[0-9A-Fa-f]+)', autorun, re.M)]
+    body = b''.join(struct.pack('<I', v) for a, v in sets if cave_low <= a < cave_low + 0x200)
+    return int(hashlib.sha256(body).hexdigest()[:8], 16) if body else None
+
+
 def word_rule(fw_w, fl_w, where, at_fp=None, at_fl=None):
+    if (fw_w, fl_w) in DERIVED:
+        return
     if fw_w == fl_w:
         if LO <= fw_w < HI:
             t = tr(fw_w)
@@ -77,6 +96,15 @@ def compare_words(WA, WB, base_a, base_b, label, addrs_a=None, addrs_b=None):
         word_rule(WA[j], WB[j], f'{label}+{4*j:#x}', aa, ab)
 
 fa, fb = sys.argv[1], sys.argv[2]
+# Fast Start cards: the loader-hook branch (stage2 writes it over the AutoRun
+# call, aimed at the loader's +4 entry) and the store magic are computed from
+# each camera's own addresses and bytes, so they differ by derivation.
+_CAVE_LOW, _LH_SITE = 0xC072DE64, 0xC03DA420
+DERIVED.add((_bl(_LH_SITE, _CAVE_LOW + 4), _bl(fw(_LH_SITE), fw(_CAVE_LOW) + 4)))
+_ma = _store_magic((Path(fa) / 'AutoRun.txt').read_text(), _CAVE_LOW)
+_mb = _store_magic((Path(fb) / 'AutoRun.txt').read_text(), fw(_CAVE_LOW))
+if _ma is not None and _mb is not None:
+    DERIVED.add((_ma, _mb))
 ea, sa = parse_bin(Path(fa) / 'fpSup.BIN'); eb, sb = parse_bin(Path(fb) / 'fpSup.BIN')
 if len(sa) != len(sb): problems.append(f'section count {len(sa)} vs {len(sb)}')
 word_rule(ea, eb, 'entry')
