@@ -267,3 +267,27 @@ doesn't recover from. Not fixed.
 All three paths work on the fp L: slow (stores the loader), fast 2.54 s, instant 1.15 s, and the power-off
 write-back runs. Fast Start stays refused for normal fp L builds until the open issue is understood:
 **USB did not connect after the first (slow, provisioning) boot**.
+
+### First-boot USB issue: not reproduced (2026-11-02)
+
+Three forced slow boots (store magic set to 0 over the shell, power switch off to save it, battery pull,
+boot with USB unplugged, then plug in). Each one was confirmed slow afterwards: store re-provisioned to
+0x5665eb93, LOAD_DONE_US 8.86 / 8.88 / 8.76 s (fast path 2.54 s, instant 1.15 s).
+**USB connected all three times** (1-1.2, class ff).
+
+So writing the store does not stop USB. stage2's provisioning is a plain RAM copy with no firmware calls,
+and that agrees. The single failure looks like the intermittent "USB doesn't come up after a boot" problem,
+also seen once with the plain r4 card (after the settings-block test's last power cycle, where it took
+several replugs). In the failing state, a second cable and a second port didn't help; only a restart did.
+Cause unknown; open as a general fp L issue, not a Fast Start one.
+
+### Ten-cycle check with Fast Start, and the fp L refusal lifted (2026-11-02)
+
+Battery pull, then ten power-switch cycles without recording (USB unplugged), then one read:
+**power-off runs=10**, journal 7 entries all = fp L stock words, hook armed, store magic intact, last boot
+instant (1.15 s). That is the SUP_BUILD_RULES §6 hook check for a hook-arming card.
+
+`--store-boot` / `--loader-hook` are no longer refused for the fp L, and the test override is gone.
+A normal `FPSUP_CAMERA=fpl` Fast Start 3 build is byte-identical to `20261102-fast3-gyro-debug-TEST`,
+the card all of the above ran on. (Fast Start stays dev-card / merge-page packaging only; single-product
+releases must not carry it, as on the fp.)

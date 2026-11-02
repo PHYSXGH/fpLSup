@@ -191,18 +191,10 @@ args = ap.parse_args()
 if args.four_box_bar is None:
     args.four_box_bar = bool(args.loader and not args.boot_call)
 import fwtarget as camera                                               # noqa: E402
-if camera.target() != 'fp' and (args.store_boot or args.loader_hook):
-    # The settings block is confirmed on the fp L (2026-11-02); the loader hook
-    # and the abort have not run there yet.  FPSUP_FPL_FASTSTART_TEST=1 lets the
-    # emulation tests and a TEST card build; nothing else does until a card has
-    # booted all three ways (cold, warm, miss) on the camera.
-    import os
-    if os.environ.get('FPSUP_FPL_FASTSTART_TEST') != '1':
-        ap.error(f'--store-boot / --loader-hook are not verified on '
-                 f'{camera.NAMES[camera.target()]} yet '
-                 f'(FPSUP_FPL_FASTSTART_TEST=1 for tests and test cards)')
-    sys.stderr.write(f'WARNING: Fast Start on {camera.NAMES[camera.target()]} '
-                     f'is a test build, not verified on the camera\n')
+# Fast Start on the fp L: settings block confirmed (power-cycle persistence),
+# the 16 loader-hook tests run against the fp L image, and a card booted all
+# three paths and passed ten power-off cycles (runs=10, journal = stock),
+# 2026-11-02.  No longer refused.
 if args.store_slim and not (args.store_boot and args.loader):
     ap.error('--store-slim requires --store-boot and --loader')
 if args.lhook_in_file and not args.loader_hook:
