@@ -33,6 +33,15 @@ ap.add_argument('--boot-call', action='append', default=[], metavar='ADDR:SRC',
                 help='write this routine at ADDR and run it once, by borrowing the '
                      'echo handler; for work the AutoRun cannot express, like '
                      'reading a file into memory')
+ap.add_argument('--noptp', action='store_true',
+                help='with the shell: also apply patches.NOPTP, so the firmware '
+                     'neither runs its PTP receiver nor arms bulk OUT on its own '
+                     'buffer.  Without it a command that arrives while the '
+                     'worker is between rounds can be taken into 0xC3025744, '
+                     'after which the endpoint stays busy and the shell is '
+                     'silent until the cable is replugged (fp L, 2026-11-02: '
+                     'the swallowed FPSH frame was found in that buffer).  '
+                     'Restored at power-off like every section.')
 ap.add_argument('--no-ep-patches', action='store_true',
                 help='leave EP 0x83 alone.  Those six patches exist for '
                      'hook-push, which a card never does.  The interface-class '
@@ -341,7 +350,7 @@ LOADER_DEFINES = [f'LOADER_BASE={LOADER_AT}', f'POOL_DESC=0x{POOL_DESC:08X}',
                       [f'LOAD_START_US=0x{LOAD_START_US:08X}'] if args.profile else []) + (
                       [f'READ_CAP=0x{args.read_cap:X}'] if args.read_cap is not None else [])
 
-from patches import IFACE, PUSH, RETAIN, SCREEN, BAR_WIDTH
+from patches import IFACE, NOPTP, PUSH, RETAIN, SCREEN, BAR_WIDTH
 
 # The on-screen readout.  `display text` draws into the OSD surface and
 # `display osd 1` composites it; with a colour argument it fills the layer
@@ -610,7 +619,8 @@ else:
     # first, and every command comes back LIBUSB_ERROR_ACCESS.  A card that
     # carries a shell you cannot talk to is not a debug card.
     fw_patches = ([] if args.no_shell else IFACE) + \
-                 ([] if args.no_ep_patches else PUSH)
+                 ([] if args.no_ep_patches else PUSH) + \
+                 (NOPTP if args.noptp else [])
     w("# --- patches and worker state: in the file, not here -------------------------")
     w("# Seven descriptor words and seventeen zeroes used to be twenty-four `mem set`")
     w("# commands.  Every one of them is a fixed value at a fixed address, which is")

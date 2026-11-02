@@ -291,3 +291,61 @@ instant (1.15 s). That is the SUP_BUILD_RULES §6 hook check for a hook-arming c
 A normal `FPSUP_CAMERA=fpl` Fast Start 3 build is byte-identical to `20261102-fast3-gyro-debug-TEST`,
 the card all of the above ran on. (Fast Start stays dev-card / merge-page packaging only; single-product
 releases must not carry it, as on the fp.)
+
+### Shell silence needing a replug: cause found (2026-11-02)
+
+- Not autosuspend: power/control = on, runtime_suspended_time = 0.
+- Not a toggle/sequence mismatch: clear_halt on 0x01 and 0x82 did not bring the shell back
+  (`projects/fpl-port/tools/usb_clear_halt.py`).
+- Not every daemon restart: a second daemon on the same connection worked once, a third failed at once.
+- The worker's fault log, read after a replug: round after round, **OUTarm = 0xffffffff**: the controller
+  refused Start Transfer on EP 0x01.
+- **The firmware's own OUT buffer (0xC3025744 → 0x442F6C80) held a whole FPSH frame of ours**: cmd 3, seq 4,
+  `shl mem get 0x452C6B40,,`, a journal read from loader_hook_check (the "lost reply").
+
+Mechanism (as recorded for the fp in patches.NOPTP): a command that arrives while the worker is between
+rounds is taken by usbTask, which arms bulk OUT on the firmware's buffer unless OUT_BUSY is 1. That transfer
+then holds the endpoint, every Start Transfer from the worker fails, and only a replug resets it.
+
+Fix: `build_autorun.py --noptp` (passed through by `build_base_card.py --noptp`, debug cards only) adds the
+two NOPTP patches. fp L sites checked: 0xC003178C (bl → PTP receiver 0xC04D79E0 → mov r0,#0) and
+0xC01E3F84 (Thumb beq → b, same stock word 0x4628D01E). Restored at power-off like every section.
+Without the flag every build is byte-identical to before.
+
+| card | AutoRun.txt | fpSup.BIN |
+|---|---|---|
+| `20261102-fast3-gyro-debug-noptp` | `1bfd1c39…` (same as the Fast Start TEST card) | `e86fdf5e…` |
+
+Not yet tested on the camera.
+
+### Correction: "USB doesn't come up" was the cable (2026-11-02)
+
+The NOPTP card did not connect on two boots (fast, warm). Then the previous Fast Start card (no NOPTP,
+connected many times today) didn't connect either, even after a battery pull. With **another cable** it
+connected at once (1-1.1, class ff). The earlier "USB doesn't come up after a boot" cases (the first Fast Start
+boot, the settings-block power cycle) were most likely the same cable: it powers the camera and shows the
+USB-mode dialog, but drops the data lines. So:
+- the "first-boot USB issue" open item is a cable fault, not a camera or card issue;
+- NOPTP[0] was **not** shown to stop the camera connecting; both of those boots were on the bad cable.
+  `--noptp-arm-only` (NOPTP[1] only) exists, but may be unnecessary. Retest full `--noptp` on a good cable.
+
+### Correction to the correction: the USB 3 C-to-C cable, not "a bad cable" in general
+
+Every connection since ~17:20 used a **USB 2.0 A-to-C** cable (high speed, 480 Mbit/s, through hub 1-1);
+none failed. Every no-connection case was on the **USB 3 C-to-C** cable (SuperSpeed, 6-1), which also
+worked much of the day. Either that cable is faulty, or the fp L's SuperSpeed link sometimes doesn't come up.
+Not separated; a second USB 3 cable would tell. Use the USB 2 cable for now.
+
+### NOPTP fixes the silence (2026-11-02)
+
+`20261102-fast3-gyro-debug-noptp` (`e86fdf5e…`), battery pull, USB 2 cable: connects; both patches live
+(0xC003178C = mov r0,#0, 0xC01E3F84 = 0x4628E01E). **Eleven daemon sessions in a row on one connection, no
+replug, all passed** (ping, MCAPS, help, 64-word read). No FPSH frame in the firmware's OUT buffer. This
+boot's fault log: one refused OUT Start Transfer on the first round after USB came up (then fine), and two
+idle wait timeouts. Earlier, without NOPTP on the same cable and port, the third daemon went silent until a
+replug.
+- `--noptp-arm-only` was added on the wrong premise (cable) and removed again.
+- `fpshd` ignored SIGTERM/SIGINT: `signal()` restarts the blocking accept(). Now `sigaction()` without
+  SA_RESTART; tested, it exits on SIGTERM.
+
+Use `--noptp` for fp L debug cards.

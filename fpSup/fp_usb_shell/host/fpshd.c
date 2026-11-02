@@ -1028,8 +1028,16 @@ int main(int argc, char **argv)
         else { fprintf(stderr, "usage: %s [--socket P] [--vid V] [--pid P] [--timeout MS]\n", argv[0]); return 2; }
     }
 
-    signal(SIGINT, on_signal);
-    signal(SIGTERM, on_signal);
+    /* sigaction without SA_RESTART: signal() on Linux restarts the blocking
+     * accept() after the handler runs, so g_stop was never seen and the
+     * daemon ignored SIGTERM/SIGINT (2026-11-02). */
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = on_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
     signal(SIGPIPE, SIG_IGN);
 
     if (libusb_init(&g_usb) != 0) { fprintf(stderr, "libusb_init failed\n"); return 1; }

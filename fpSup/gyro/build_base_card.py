@@ -315,6 +315,9 @@ def main():
                     help='debug: passed to build_autorun.py (see there)')
     ap.add_argument('--four-box-bar', action='store_true',
                     help='passed to build_autorun.py')
+    ap.add_argument('--noptp', action='store_true',
+                    help='with --debug: passed to build_autorun.py (keeps the '
+                         'firmware off the shell\'s OUT endpoint)')
     ap.add_argument('--no-lens-json', action='store_true',
                     help='leave the lens profile .json out (always so on a camera '
                          'other than the fp); on the fp only for comparing builds')
@@ -363,7 +366,8 @@ def main():
                if a.loader_hook_mark else []) + (
                ['--four-box-bar'] if a.four_box_bar else []) + (
                ['--store-boot'] if a.store_boot else []) + (
-               ['--no-ep-patches'] if a.debug else ['--no-shell']) + [
+               ['--no-ep-patches'] if a.debug else ['--no-shell']) + (
+               ['--noptp'] if a.noptp and a.debug else []) + [
            # A soft power cycle can leave a previous session's diagnostic patch
            # in the F_WRITE prologue.  Every ordinary image puts it back.
            '--also', f'0x{F_WRITE_AT:08X}:{HERE / "phase_fwrite_restore.S"}',
