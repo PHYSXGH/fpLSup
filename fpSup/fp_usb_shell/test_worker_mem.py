@@ -10,10 +10,12 @@ import unittest
 import zlib
 
 from armasm import assemble, symbols
+from fwtarget import fw                                       # noqa: E402
 from test_worker_upload import IMAGE, UNICORN_RUNS, WORKER, FW_CRC32, FW_TABLE
 
 try:
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE
+    from unicorn import arm_const
     from unicorn.arm_const import (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R4,
                                    UC_ARM_REG_R6, UC_ARM_REG_SP)
 except ImportError:
@@ -22,17 +24,24 @@ except ImportError:
 CODE = 0x60000000                   # also WCODE_PTR: inside DMA_LO..DMA_HI
 POOL = 0x45000000
 UNCACHED = POOL + 0x40000000
-STATE = 0xC072F000
+# Where the worker must see the frame the host's DMA wrote.  On the fp that is
+# the uncached mirror at +0x40000000 (1 GB of RAM, mirrored above it).  The
+# fp L has 2 GB and no mirror: +0x40000000 is other RAM, and the frame is at
+# the pool's own address (fwtarget.memory(), FPSUP_NO_UNCACHED_ALIAS).
+import fwtarget                                               # noqa: E402
+FRAME_VIEW = UNCACHED if fwtarget.memory()['uncached_alias'] else POOL
+STATE = fw(0xC072F000)
 STACK = 0x70000000
 STAGE = POOL + 0x10000
 WIN = POOL + 0x6A00
 OTHER = 0x50000000                  # some other allocation, for windows
-TRBS = 0xC31E3800                   # where the two TRB pointers point
-TRB_OUT_AT, TRB_IN_AT = 0xC31E3268, 0xC31E326C
+TRB_OUT_AT, TRB_IN_AT = fw(0xC31E3268), fw(0xC31E326C)
+USB_PAGE = TRB_OUT_AT & ~0xFFF        # the driver's page; OUT_BUSY is on it too
+TRBS = USB_PAGE + 0x800                 # where the two TRB pointers point
 TRB_OUT, TRB_IN = TRBS, TRBS + 0x10
 
 F_DCACHE, FN_STARTX, FN_WAIT, FN_ENDX, FN_DELAY = (
-    0xC000E91C, 0xC01E6B80, 0xC01E4E80, 0xC01E6D48, 0xC01F89C4)
+    fw(0xC000E91C), fw(0xC01E6B80), fw(0xC01E4E80), fw(0xC01E6D48), fw(0xC01F89C4))
 THUMB_STUBS = (FN_STARTX, FN_WAIT, FN_ENDX)
 XFER_MAX = 0xFFFC00
 
@@ -75,9 +84,9 @@ class WorkerMemTests(unittest.TestCase):
         uc.mem_map(POOL, 0x100000)
         uc.mem_map(UNCACHED, 0x4000)
         uc.mem_map(OTHER, 0x20000)
-        uc.mem_map(STATE, 0x1000)
+        uc.mem_map(STATE & ~0xFFF, 0x2000)   # STATE need not be page-aligned (fp L: 0xC072CA80)
         uc.mem_map(STACK, 0x10000)
-        uc.mem_map(0xC31E3000, 0x1000)
+        uc.mem_map(USB_PAGE, 0x1000)
         img = IMAGE.read_bytes()
         for page in (FW_CRC32 & ~0xFFF, FW_TABLE & ~0xFFF):
             uc.mem_map(page, 0x2000)
@@ -94,10 +103,10 @@ class WorkerMemTests(unittest.TestCase):
         uc.mem_write(TRB_OUT_AT, struct.pack('<II', TRB_OUT, TRB_IN))
         for slot, (base, length, perm) in enumerate(windows):
             uc.mem_write(WIN + 12 * slot, struct.pack('<III', base, length, perm))
-        uc.mem_write(UNCACHED, request)
+        uc.mem_write(FRAME_VIEW, request)
         uc.mem_write(STAGE, b'\xA5' * 0x2000)
         uc.reg_write(UC_ARM_REG_R4, STATE)
-        uc.reg_write(UC_ARM_REG_R6, UNCACHED)
+        uc.reg_write(UC_ARM_REG_R6, FRAME_VIEW)
         uc.reg_write(UC_ARM_REG_SP, STACK + 0x8000)
 
         run = Run()
@@ -107,8 +116,14 @@ class WorkerMemTests(unittest.TestCase):
         def to_cpu(bus):
             return (bus + 0x40000000) & 0xFFFFFFFF
 
+        regs = [getattr(arm_const, f'UC_ARM_REG_R{i}') for i in range(13)]
+
         def hook(m, address, _size, _user):
             r0 = m.reg_read(UC_ARM_REG_R0)
+            if CODE <= address < CODE + len(self.code):
+                w, = struct.unpack('<I', m.mem_read(address, 4))
+                if (w & 0x0FFF0FFF) == 0x0E070F3E:          # DCCIMVAC
+                    run.calls.append(('cmo', m.reg_read(regs[(w >> 12) & 15])))
             if address == end:
                 stopped.append(True)
                 m.emu_stop()
@@ -125,7 +140,7 @@ class WorkerMemTests(unittest.TestCase):
                 if r0 == 2:
                     run.out_arms.append((buf, size))
                 elif to_cpu(buf) == POOL and size == 64:
-                    f = bytes(m.mem_read(UNCACHED, 64))
+                    f = bytes(m.mem_read(FRAME_VIEW, 64))
                     _, _, _, _, seq, plen, status, crc = struct.unpack_from(
                         '<4sBBHIHHI', f)
                     check = bytearray(f)
@@ -174,7 +189,7 @@ class WorkerMemTests(unittest.TestCase):
         self.assertTrue(stopped, 'handler did not come back to next_round')
         run.uc = uc
         run.state = struct.unpack('<16I', uc.mem_read(STATE, 64))
-        run.out_busy = struct.unpack('<I', uc.mem_read(0xC31E3974, 4))[0]
+        run.out_busy = struct.unpack('<I', uc.mem_read(fw(0xC31E3974), 4))[0]
         run.windows = [struct.unpack_from('<III', uc.mem_read(WIN + 12 * i, 12))
                        for i in range(8)]
         return run
@@ -182,6 +197,7 @@ class WorkerMemTests(unittest.TestCase):
     # --- windows ------------------------------------------------------------
     def test_window_grants_and_refusals(self):
         R, W = 1, 2
+        TOP = fwtarget.ram_top()          # 0x80000000 on the fp, 0xC0000000 on the fp L
         cases = [
             ((0, OTHER, 0x10000, R | W), 0),
             ((0, 0x40001000, 0x1000, R), 0),          # read low: allowed
@@ -191,7 +207,10 @@ class WorkerMemTests(unittest.TestCase):
             ((0, CODE + 0x800, 0x100, W), 2),         # this worker's code
             ((0, CODE - 0x100, 0x200, W), 2),         # straddles its start
             ((0, CODE + 0x800, 0x100, R), 0),         # reading the code: fine
-            ((0, 0x7FFFF000, 0x2000, R), 2),          # past DMA_HI
+            ((0, TOP - 0x1000, 0x2000, R), 2),        # past DMA_HI (the top of RAM)
+            ((0, TOP - 0x1000, 0x1000, R), 0),        # up to it: fine
+            ((0, 0x90000000, 0x1000, R),               # the fp L's second gigabyte
+             2 if TOP <= 0x90000000 else 0),
             ((0, 0xC0000000, 0x1000, R), 2),          # the image
             ((0, OTHER, 0, R), 2),
             ((0, OTHER + 2, 0x100, R), 2),
@@ -217,6 +236,67 @@ class WorkerMemTests(unittest.TestCase):
         self.assertEqual(run.sent[-1][2][0], 1)
         self.assertEqual(run.windows[0], (0, 0, 0))
 
+    @unittest.skipIf(fwtarget.memory()['uncached_alias'], 'the fp uses the uncached mirror')
+    def test_no_mirror_every_transfer_buffer_is_flushed_first(self):
+        """Without the mirror, the controller and the CPU only agree through cache
+        maintenance on the buffer itself: every StartTransfer's whole buffer must
+        have been cleaned+invalidated by address since the previous one, and a
+        command must be read only after its frame was (got_command)."""
+        for req, entry in ((frame(9), 'got_command'), (frame(7, POOL, 0x100, 0), None),
+                           (frame(8, 3, 0, 0, 0), None)):
+            run = self.run_cmd(req, entry=entry)
+            lines = set()
+            for c in run.calls:
+                if c[0] == 'cmo':
+                    lines.add(c[1] & ~31)
+                elif c[0] == 'startx':
+                    lo = (c[2] + 0x40000000) & 0xFFFFFFFF      # bus -> CPU address
+                    want = set(range(lo & ~31, lo + c[3], 32))
+                    self.assertFalse(want - lines, f'StartTransfer of {c[3]} bytes at '
+                                     f'{lo:#x} with lines not flushed')
+                    lines = set()
+            if entry == 'got_command':
+                first = next(i for i, c in enumerate(run.calls) if c[0] != 'cmo')
+                self.assertTrue(run.calls[:first], 'the command read before its frame was flushed')
+                covered = {c[1] & ~31 for c in run.calls[:first]}
+                self.assertTrue(set(range(POOL, POOL + 64, 32)) <= covered)
+
+    def test_the_idle_round_never_masks_interrupts_to_flush(self):
+        """F_DCACHE walks all of L1 and L2 with IRQ and FIQ off.  The worker
+        re-arms (arm_out) several times a second while nothing happens; calling
+        it there froze the fp L in live view (2026-11-02).  Only a host that asks
+        for a sync (MEMR/MEMW OPT_SYNC) gets one.  On the fp L, arm_out instead
+        flushes its own OUT buffer by address before arming it."""
+        from unicorn.arm_const import UC_ARM_REG_LR
+        for req, entry in ((frame(9), 'got_command'), (frame(7, POOL, 0x100, 0), None),
+                           (frame(8, 3, 0, 0, 0), None)):
+            run = self.run_cmd(req, entry=entry)
+            self.assertNotIn(('dcache',), run.calls)
+        # the idle round itself: arm_out, entered the way next_round does
+        uc = run.uc
+        run.calls.clear()
+        uc.reg_write(UC_ARM_REG_R4, STATE)
+        uc.mem_write(STATE + 8, b'\0' * 4)
+        uc.reg_write(UC_ARM_REG_SP, STACK + 0x8000)
+        uc.reg_write(UC_ARM_REG_LR, CODE + len(self.code))
+        uc.emu_start(CODE + self.labels['arm_out'], CODE + len(self.code), count=100_000)
+        self.assertNotIn(('dcache',), run.calls)
+        self.assertIn('startx', [c[0] for c in run.calls])
+        if not fwtarget.memory()['uncached_alias']:
+            lines = {c[1] & ~31 for c in run.calls if c[0] == 'cmo'}
+            self.assertTrue(set(range(POOL, POOL + 0x4000, 32)) <= lines,
+                            'arm_out armed its OUT buffer without flushing it')
+
+    def test_a_command_is_read_where_the_dma_put_it(self):
+        """From the top of a round, the way a real command arrives.  The other
+        tests enter a handler with the frame already in r6, so none of them reads
+        the frame from FRAMEBUF.  On the fp L the frame is at the pool's own
+        address and +0x40000000 is other RAM; reading there finds no command and
+        every reply is the host's own frame sent back (2026-11-02)."""
+        run = self.run_cmd(frame(9), entry='got_command')
+        raw = b''.join(struct.pack(f'<{len(w)}I', *w) for _, _, w in run.sent)
+        self.assertEqual(raw[:4], b'MEM1', 'the capability reply, not an empty one')
+
     def test_caps(self):
         run = self.run_cmd(frame(9), windows=[(OTHER, 0x100, 3)])
         raw = b''.join(struct.pack(f'<{len(w)}I', *w) for _, _, w in run.sent)
@@ -232,7 +312,7 @@ class WorkerMemTests(unittest.TestCase):
         uc.mem_map(CODE, 0x1000)
         uc.mem_write(CODE, self.code)
         uc.mem_map(POOL, 0x100000)
-        uc.mem_map(STATE, 0x1000)
+        uc.mem_map(STATE & ~0xFFF, 0x2000)   # STATE need not be page-aligned (fp L: 0xC072CA80)
         uc.mem_map(STACK, 0x10000)
         uc.mem_write(STATE + 0x50, struct.pack('<I', POOL))
         uc.mem_write(WIN, struct.pack('<III', OTHER, 0x1000, 3) * 8)
@@ -247,14 +327,14 @@ class WorkerMemTests(unittest.TestCase):
         from unicorn.arm_const import UC_ARM_REG_LR
         run = self.run_cmd(frame(9))                 # any machine, then reuse it
         uc = run.uc
-        uc.mem_write(UNCACHED, frame(6, STAGE, 0x400, 0) + b'shl echo')
-        uc.mem_write(UNCACHED + 20, b'shl ')
+        uc.mem_write(FRAME_VIEW, frame(6, STAGE, 0x400, 0) + b'shl echo')
+        uc.mem_write(FRAME_VIEW + 20, b'shl ')
         uc.reg_write(UC_ARM_REG_R4, STATE)
         uc.mem_write(STATE + 8, b'\0' * 4)
         uc.reg_write(UC_ARM_REG_SP, STACK + 0x8000)
         uc.reg_write(UC_ARM_REG_LR, CODE + len(self.code))
         uc.emu_start(CODE + self.labels['arm_out'], CODE + len(self.code), count=10_000)
-        head = bytes(uc.mem_read(UNCACHED, 24))
+        head = bytes(uc.mem_read(FRAME_VIEW, 24))
         self.assertEqual(head[:8], b'\0' * 8)
         self.assertEqual(head[20:24], b'\0' * 4)
 
@@ -264,7 +344,7 @@ class WorkerMemTests(unittest.TestCase):
         from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_R0, UC_ARM_REG_R1
         uc = Uc(UC_ARCH_ARM, UC_MODE_ARM)
         uc.mem_map(CODE, 0x1000); uc.mem_write(CODE, self.code)
-        uc.mem_map(STACK, 0x10000); uc.mem_map(0xC31E3000, 0x1000)
+        uc.mem_map(STACK, 0x10000); uc.mem_map(USB_PAGE, 0x1000)
         uc.mem_map(FN_WAIT & ~0xFFF, 0x1000); uc.mem_write(FN_WAIT, b'\x70\x47')
         uc.mem_write(TRB_OUT_AT, struct.pack('<II', TRB_OUT, TRB_IN))
         trb = TRB_OUT if ep == 1 else TRB_IN
@@ -349,10 +429,10 @@ class WorkerMemTests(unittest.TestCase):
         self.assertEqual(run.sent[0], (0, 12, (0, STAGE, 5120)))     # READY
         self.assertEqual(run.sent[1], (0, 12, (0, len(data), zlib.crc32(data))))
         self.assertEqual(bytes(run.uc.mem_read(STAGE, len(data))), data)
-        names = [c[0] for c in run.calls]
+        names = [c[0] for c in run.calls if c[0] != 'cmo']
         # cache before the arm, again after the data, and READY before the wait
         self.assertEqual(names[:2], ['dcache', 'startx'])
-        out_wait = run.calls.index(('wait', 1, 20))
+        out_wait = [c for c in run.calls if c[0] != 'cmo'].index(('wait', 1, 20))
         self.assertLess(names.index('dcache', 2), len(names))
         self.assertGreater(names.index('dcache', 2), out_wait)
         self.assertEqual(run.state[8], 1)

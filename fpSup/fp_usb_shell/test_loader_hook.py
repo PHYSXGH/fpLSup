@@ -25,9 +25,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from fwtarget import fw                                       # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
-IMAGE = HERE.parents[1] / 'out' / 'MAIN_c0000000.bin'
+import fwtarget                                               # noqa: E402
+TARGET = fwtarget.target()
+IMAGE = HERE.parents[1] / ('out' if TARGET == 'fp' else f'out_{TARGET}') / 'MAIN_c0000000.bin'
+# The loader hook and Fast Start are refused for other cameras (build_autorun).
+HOOK_PATHS = TARGET == 'fp'
 
 try:
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE
@@ -37,27 +42,27 @@ try:
 except ImportError:                                      # pragma: no cover
     Uc = None
 
-CAVE_LOW = 0xC072DE64
-SITE, SITE_ORIG, AR_RET = 0xC03DA420, 0xEB0000CC, 0xC03DA424
-AR_START = 0xC03DA758
-MARK = 0xC072E040
-CAVE_LO, CAVE_HI = 0xC072D000, 0xC0735000
+CAVE_LOW = fw(0xC072DE64)
+SITE, SITE_ORIG, AR_RET = fw(0xC03DA420), 0xEB0000CC, fw(0xC03DA424)
+AR_START = fw(0xC03DA758)
+MARK = fw(0xC072E040)
+CAVE_LO, CAVE_HI = fw(0xC072D000), fw(0xC0735000)
 HEAP, HEAP_SIZE = 0x45000000, 0x00400000
 STACK = 0x46000000
 DONE = 0x47000000                  # a return address nothing else uses
 
-F = dict(F_MGR=0xC0444658, F_VOL=0xC0444698, F_CTOR=0xC0365E90,
-         F_OPEN=0xC0365FB0, F_READ=0xC0366060, F_CLOSE=0xC0366020,
-         F_DTOR=0xC0365ED0, DCACHE=0xC000E91C, ICACHE=0xC000EABC,
-         TICK=0xC002B6E0, H_GET=0xC001D740, H_ADDR=0xC001D7F0,
-         H_FREE=0xC001D7A0, MEM_HEAP=0xC001CF78, MEM_GET=0xC001D038,
-         POFF_MGR=0xC0023A98, POFF_ADD=0xC0024118, AR_START=AR_START,
-         D_TEXT=0xC03E4620, D_OSD=0xC03E3D00, D_SLEEP=0xC03705D8,
-         D_FILE=0xC03E4270, CYC_DRAW=0xC05278F8, UI_CLEAR=0xC0527DD8,
-         UI_FORCE=0xC0527E68)
+F = dict(F_MGR=fw(0xC0444658), F_VOL=fw(0xC0444698), F_CTOR=fw(0xC0365E90),
+         F_OPEN=fw(0xC0365FB0), F_READ=fw(0xC0366060), F_CLOSE=fw(0xC0366020),
+         F_DTOR=fw(0xC0365ED0), DCACHE=fw(0xC000E91C), ICACHE=fw(0xC000EABC),
+         TICK=fw(0xC002B6E0), H_GET=fw(0xC001D740), H_ADDR=fw(0xC001D7F0),
+         H_FREE=fw(0xC001D7A0), MEM_HEAP=fw(0xC001CF78), MEM_GET=fw(0xC001D038),
+         POFF_MGR=fw(0xC0023A98), POFF_ADD=fw(0xC0024118), AR_START=AR_START,
+         D_TEXT=fw(0xC03E4620), D_OSD=fw(0xC03E3D00), D_SLEEP=fw(0xC03705D8),
+         D_FILE=fw(0xC03E4270), CYC_DRAW=fw(0xC05278F8), UI_CLEAR=fw(0xC0527DD8),
+         UI_FORCE=fw(0xC0527E68))
 
 
-DRAW, DRAW_STOCK, DRAW_PAUSED = 0xC0528700, 0xE92D4BF0, 0xE12FFF1E
+DRAW, DRAW_STOCK, DRAW_PAUSED = fw(0xC0528700), 0xE92D4BF0, 0xE12FFF1E
 
 
 def build(extra=(), hook=True):
@@ -188,6 +193,7 @@ class Camera:
 
 
 @unittest.skipIf(Uc is None or not IMAGE.exists(), 'needs unicorn and the image')
+@unittest.skipUnless(HOOK_PATHS, 'loader hook / Fast Start not enabled for this camera')
 class LoaderHookTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -197,7 +203,7 @@ class LoaderHookTests(unittest.TestCase):
         cam = Camera(self.loader, self.bin, **kw)
         cam.mu.mem_write(SITE, struct.pack('<I', 0xEB000000 | ((((CAVE_LOW + 4)
                          - SITE - 8) >> 2) & 0xFFFFFF)))    # armed by a past boot
-        r0, sp = cam.call(CAVE_LOW + 4, r0=0xC0BABDD8, r1=1, lr=AR_RET,
+        r0, sp = cam.call(CAVE_LOW + 4, r0=fw(0xC0BABDD8), r1=1, lr=AR_RET,
                           sp=STACK - 0x1004)
         return cam, r0, sp
 
@@ -268,7 +274,7 @@ class LoaderHookTests(unittest.TestCase):
 
     def test_no_file_starts_the_autorun_as_the_firmware_would(self):
         cam, _, _ = self.boot(have_file=False)
-        self.assertEqual(cam.ar_started, (0xC0BABDD8, 1, AR_RET))
+        self.assertEqual(cam.ar_started, (fw(0xC0BABDD8), 1, AR_RET))
         self.assertNotIn('ENTRY', cam.calls)
         self.assertEqual(cam.draws, [])
 
@@ -289,6 +295,7 @@ class LoaderHookTests(unittest.TestCase):
 
 
 @unittest.skipIf(Uc is None or not IMAGE.exists(), 'needs unicorn and the image')
+@unittest.skipUnless(HOOK_PATHS, 'loader hook / Fast Start not enabled for this camera')
 class FourBoxOnTheHookTests(unittest.TestCase):
     """--four-box-bar with --loader-hook: the warm path paints frame 0 and runs
     splash_finish itself; the AutoRun path is left exactly as it was."""
@@ -301,7 +308,7 @@ class FourBoxOnTheHookTests(unittest.TestCase):
         cam.mu.mem_write(SITE, struct.pack('<I', 0xEB000000 | ((((CAVE_LOW + 4)
                          - SITE - 8) >> 2) & 0xFFFFFF)))
         self.assertEqual(cam.word(DRAW), DRAW_STOCK)
-        r0, _ = cam.call(CAVE_LOW + 4, r0=0xC0BABDD8, r1=1, lr=AR_RET, sp=STACK - 0x1004)
+        r0, _ = cam.call(CAVE_LOW + 4, r0=fw(0xC0BABDD8), r1=1, lr=AR_RET, sp=STACK - 0x1004)
         self.assertIsNone(cam.ar_started)
         files = [(a[0], a[3], a[4], d) for n, a, d in cam.draws if n == 'D_FILE']
         self.assertEqual(files[:3], [('\\FPSUPUI\\0.BIN', '1024', '56', DRAW_PAUSED)] * 3)
@@ -330,12 +337,13 @@ class FourBoxOnTheHookTests(unittest.TestCase):
         self.assertEqual(cam.word(DRAW), DRAW_STOCK)
 
 
-ECHO_SLOT, ECHO_ORIG = 0xC0BAC2F8, 0xC03D99A0
-AR_TABLE, AR_LINEFN = 0xC2F20FC0, 0xC03DA7A8
-STORE = 0xC3075264
+ECHO_SLOT, ECHO_ORIG = fw(0xC0BAC2F8), fw(0xC03D99A0)
+AR_TABLE, AR_LINEFN = fw(0xC2F20FC0), fw(0xC03DA7A8)
+STORE = fw(0xC3075264)
 
 
 @unittest.skipIf(Uc is None or not IMAGE.exists(), 'needs unicorn and the image')
+@unittest.skipUnless(HOOK_PATHS, 'loader hook / Fast Start not enabled for this camera')
 class ThreeWayBootTests(unittest.TestCase):
     """--store-boot with --loader-hook: instant (hook), fast (store), slow.
     The abort that stops the AutoRun is armed only when an AutoRun is running;
@@ -350,7 +358,7 @@ class ThreeWayBootTests(unittest.TestCase):
         cam.mu.mem_write(AR_TABLE + 0x21C, struct.pack('<I', 0))   # no script
         cam.mu.mem_write(SITE, struct.pack('<I', 0xEB000000 | ((((CAVE_LOW + 4)
                          - SITE - 8) >> 2) & 0xFFFFFF)))
-        cam.call(CAVE_LOW + 4, r0=0xC0BABDD8, r1=1, lr=AR_RET, sp=STACK - 0x1004)
+        cam.call(CAVE_LOW + 4, r0=fw(0xC0BABDD8), r1=1, lr=AR_RET, sp=STACK - 0x1004)
         self.assertIsNone(cam.ar_started)
         self.assertEqual(cam.word(ECHO_SLOT), ECHO_ORIG)
         self.assertNotEqual(cam.word(STORE), 0)                 # magic written
@@ -382,7 +390,7 @@ class ThreeWayBootTests(unittest.TestCase):
         cam = Camera(self.loader, self.bin)
         cam.now = 15_000_000
         cam.mu.mem_write(AR_TABLE + 0x21C, struct.pack('<I', 1))
-        cam.mu.mem_write(AR_TABLE + 36 + 4, struct.pack('<I', 0xC0420C20))
+        cam.mu.mem_write(AR_TABLE + 36 + 4, struct.pack('<I', fw(0xC0420C20)))
         cam.call(CAVE_LOW, r0=0, r1=0)
         self.assertEqual(cam.word(ECHO_SLOT), ECHO_ORIG)
 

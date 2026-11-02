@@ -5,12 +5,16 @@ R_ARM_CALL relocations clang leaves for `bl` between local labels have to be
 applied here.  Nothing else is supported, which is deliberate — if a source file
 needs more than that, it is doing something the camera cannot load anyway.
 """
-import pathlib, struct, subprocess, sys, tempfile
+import pathlib, re, struct, subprocess, sys, tempfile
 
 
 def _compile(src, defines=()):
     """Assemble to an object file and return (elf_bytes,)."""
     src = pathlib.Path(src)
+    import fwtarget as camera
+    if camera.CAMERAS[camera.target()] is not None:
+        return _compile_translated(src, defines, camera)
+    defines = tuple(defines) + camera.asm_defines()     # () on the fp
     with tempfile.TemporaryDirectory() as tmp:
         obj = pathlib.Path(tmp) / 'a.o'
         r = subprocess.run(
@@ -22,6 +26,44 @@ def _compile(src, defines=()):
             raise SystemExit(1)
         elf = obj.read_bytes()
     return elf
+
+
+def _compile_translated(src, defines, camera):
+    """Another camera: preprocess, rewrite the firmware addresses, assemble."""
+    with tempfile.TemporaryDirectory() as tmp:
+        pre = pathlib.Path(tmp) / 'a.s'
+        obj = pathlib.Path(tmp) / 'a.o'
+        # Defines come from Python, which already gave this camera's values
+        # (fw()); spelled in decimal they are not translated a second time.
+        def _final(d):
+            k, eq, v = d.partition('=')
+            if eq and re.fullmatch(r'0[xX][0-9a-fA-F]+', v.strip()):
+                return f'{k}={int(v, 16)}'
+            return d
+        defines = tuple(defines) + camera.asm_defines()     # the camera's memory map
+        base = ['clang', '-target', 'armv7-none-eabi'] + [f'-D{_final(d)}' for d in defines]
+        r = subprocess.run(base + ['-E', '-x', 'assembler-with-cpp', str(src), '-o', str(pre)],
+                           capture_output=True, text=True)
+        if r.returncode:
+            sys.stderr.write(r.stderr)
+            raise SystemExit(1)
+        poisons = {}
+        pre.write_text(camera.translate_asm(pre.read_text(), src.name, poisons))
+        r = subprocess.run(base + ['-c', '-x', 'assembler', str(pre), '-o', str(obj)],
+                           capture_output=True, text=True)
+        if r.returncode:
+            sys.stderr.write(r.stderr)
+            raise SystemExit(1)
+        elf = obj.read_bytes()
+        _, sections, by_name = _parse(elf)
+        text = by_name['.text'][1]
+        hits = camera.poison_hits(elf[text[4]:text[4] + text[5]], poisons)
+        if hits:
+            raise camera.UnmappedAddress(
+                f'{src.name}: code uses fp addresses with no mapping for this camera:\n  '
+                + '\n  '.join(hits + ['poisoned in this file:']
+                                + [f'  {v:#x} = {why}' for v, (a, why) in poisons.items()]))
+        return elf
 
 
 def _parse(elf):

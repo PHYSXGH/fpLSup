@@ -16,6 +16,7 @@ takes are also the seconds that restore needs.
 import argparse, hashlib, pathlib, sys
 
 from armasm import assemble, symbols, words as to_words
+from fwtarget import fw                                       # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 DEST_DEFAULT = HERE / 'autorun' / 'AutoRun.txt'
@@ -23,7 +24,7 @@ DEST_DEFAULT = HERE / 'autorun' / 'AutoRun.txt'
 ap = argparse.ArgumentParser()
 ap.add_argument('--payload', help='source to load into the cave and arm')
 ap.add_argument('--entry', help='symbol in the payload the callback should reach')
-ap.add_argument('--payload-addr', type=lambda s: int(s, 0), default=0xC072DE64)
+ap.add_argument('--payload-addr', type=lambda s: int(s, 0), default=fw(0xC072DE64))
 ap.add_argument('--out', type=pathlib.Path, default=None,
                 help='where to write; defaults to this tool\'s own autorun/')
 ap.add_argument('--also', action='append', default=[], metavar='ADDR:SRC',
@@ -189,6 +190,12 @@ ap.add_argument('--splash-hold-ms', type=int, default=None,
 args = ap.parse_args()
 if args.four_box_bar is None:
     args.four_box_bar = bool(args.loader and not args.boot_call)
+import fwtarget as camera                                               # noqa: E402
+if camera.target() != 'fp' and (args.store_boot or args.loader_hook):
+    # Fast Start writes the loader into the flash-backed settings block, whose
+    # fp L address is inferred, not yet read on a camera.  Not before it is.
+    ap.error(f'--store-boot / --loader-hook are not verified on '
+             f'{camera.NAMES[camera.target()]} yet')
 if args.store_slim and not (args.store_boot and args.loader):
     ap.error('--store-slim requires --store-boot and --loader')
 if args.lhook_in_file and not args.loader_hook:
@@ -216,29 +223,29 @@ BIN_PATH_DEF = f'BIN_PATH="\\\\{args.bin_name}"'
 DEST = args.out or DEST_DEFAULT
 DEST.parent.mkdir(parents=True, exist_ok=True)
 
-CAVE_LOW = 0xC072DE64
-STORE = 0xC3075264           # XC_CommonSaveData + 0x28: past the u16 the
+CAVE_LOW = fw(0xC072DE64)
+STORE = fw(0xC3075264)           # XC_CommonSaveData + 0x28: past the u16 the
                              # firmware clears at +0x024.  Measured safe to
                              # +0x200 -- see PERSISTENT_STORE_COMMONSAVE.md
-STORE_MAX = (0xC307523C + 0x200) - (STORE + 4)     # what the body may occupy;
+STORE_MAX = (fw(0xC307523C) + 0x200) - (STORE + 4)     # what the body may occupy;
                              # the header is one word (the magic) -- see
                              # asm/store_boot.S for where the other three
                              # fields went
-CAVE_END = 0xC0730000        # the cave's top; sections above this are the
+CAVE_END = fw(0xC0730000)        # the cave's top; sections above this are the
                              # payload's own business, not the loader's
 # The worker's code leaves the cave: it is copied into the pool it asks for,
 # and what stays here is the directory the host tools find it through.  That
 # frees 0xC072F058..0xC072F6D8 -- everything below is back where it was before
 # the worker briefly grew into it.
-POOL_DESC     = 0xC072F6D8   # the loader's allocator descriptor, boot-only
-WPOOL_PTR     = 0xC072F050   # the worker's pool address, next to its state
-WPOOL_SIZE    = 0xC072F054   # and what it asked for -- putfile reads both
-ABORT_AT      = 0xC072F080   # the routine that stops the interpreter, placed
+POOL_DESC     = fw(0xC072F6D8)   # the loader's allocator descriptor, boot-only
+WPOOL_PTR     = fw(0xC072F050)   # the worker's pool address, next to its state
+WPOOL_SIZE    = fw(0xC072F054)   # and what it asked for -- putfile reads both
+ABORT_AT      = fw(0xC072F080)   # the routine that stops the interpreter, placed
                              # here by fpSup.BIN rather than carried in the
                              # loader: it was 128 of the loader's 464 bytes,
                              # and the loader is the one thing that has to fit
                              # in the 468 the settings block holds
-WCODE_PTR     = 0xC072F058   # its code's own allocation, separate from the
+WCODE_PTR     = fw(0xC072F058)   # its code's own allocation, separate from the
                              # buffers: an offset inside one block is a
                              # convention, and conventions are what this tree's
                              # address collisions have all been made of
@@ -258,29 +265,30 @@ def _equ(path, name):
     loader's length."""
     import re
     m = re.search(rf'^\.equ\s+{name},\s*(0x[0-9A-Fa-f]+)', path.read_text(), re.M)
-    return int(m.group(1), 16) if m else None
-LOAD_START_US = 0xC072F6F4   # --profile: when the loader was entered.  Next
+    # The source spells the fp's address; this camera's is what was assembled.
+    return fw(int(m.group(1), 16)) if m else None
+LOAD_START_US = fw(0xC072F6F4)   # --profile: when the loader was entered.  Next
                              # to the word below on purpose -- `mem get
                              # 0xC072F6F4,,8` reads the whole profile.
-LOAD_DONE_US  = 0xC072F6F8   # when the load finished, in the camera's own
+LOAD_DONE_US  = fw(0xC072F6F8)   # when the load finished, in the camera's own
                              # microseconds (TICK_US).  Was STORE_FROM, the
                              # store_boot -> loader handshake, which the magic
                              # replaced -- so the word was reserved and dead.
                              # Read it with `mem get 0xC072F6F8,,4` after a boot:
                              # that is power-on to load-complete, with no host,
                              # no USB enumeration and no polling in the number.
-STORE_BOOT_AT = 0xC072F700   # cave scratch: above the payload and above
+STORE_BOOT_AT = fw(0xC072F700)   # cave scratch: above the payload and above
                              # the shell's worker.  NOT CAVE_LOW -- the
                              # bootstrap copies the loader there and would
                              # overwrite itself.
 LOADER_END = CAVE_LOW + 0x200   # loader.S sits at the bottom; payloads go above
-CAVE_BUMP  = 0xC072E060   # the cave's next free address, and the ONLY cave word a
+CAVE_BUMP  = fw(0xC072E060)   # the cave's next free address, and the ONLY cave word a
                           # build still names.  It is the last word of the loader's
                           # own 0x200 block rather than a claim of its own: the
                           # loader is the one thing that cannot ask for space --
                           # it is what goes and asks -- so its block is where the
                           # asking starts.  stage2 initialises it every boot.
-CAVE_ARENA_END = 0xC072EFB4   # the park stub.  An allocation that would cross it
+CAVE_ARENA_END = fw(0xC072EFB4)   # the park stub.  An allocation that would cross it
                               # is refused, and the payload stands down the same
                               # way it does when the pool allocator says no.
 CAVE_ARENA = LOADER_END   # where handing out begins: everything above the
@@ -316,13 +324,13 @@ MARK_MAGIC = 0x314B524D          # 'MRK1': this boot's AutoRun wrote it
 # worker is not placed in the cave at all.  So the fallback build puts it low
 # instead, in the stretch that build leaves empty (no loader, and a payload
 # there is refused below).
-LOAD   = 0xC072F050   # --loader: the pool words; fallback: see WORKER_AT
-WORKER_AT = 0xC072E800
-STATE  = 0xC072F000   # worker state, 16 words
-CAPLEN = 0xC072F040   # capture length
-ECHO_SLOT = 0xC0BAC2F8  # command table entry 17, echo's handler pointer
-ECHO_ORIG = 0xC03D99A0
-HOOK   = 0xC00D0794   # gyro callback, borrowed once to create the task
+LOAD   = fw(0xC072F050)   # --loader: the pool words; fallback: see WORKER_AT
+WORKER_AT = fw(0xC072E800)
+STATE  = fw(0xC072F000)   # worker state, 16 words
+CAPLEN = fw(0xC072F040)   # capture length
+ECHO_SLOT = fw(0xC0BAC2F8)  # command table entry 17, echo's handler pointer
+ECHO_ORIG = fw(0xC03D99A0)
+HOOK   = fw(0xC00D0794)   # gyro callback, borrowed once to create the task
 
 if args.read_cap is not None and (args.read_cap & 0xFFF or
                                   not 0xF000 <= args.read_cap <= 0x1F000):
@@ -418,7 +426,7 @@ def verify_stage2_cache_publish(code):
         if low is not None and high is not None:
             calls.append((index, low | high << 16))
 
-    required = [0xC000E91C, 0xC000EABC]
+    required = [fw(0xC000E91C), fw(0xC000EABC)]
     if [address for _, address in calls] != required:
         sys.exit('stage2 must call D-cache maintenance 0xC000E91C followed by '
                  'whole I-cache invalidate 0xC000EABC after placing sections; '
@@ -537,7 +545,7 @@ end = (LOAD if args.loader else WORKER_AT) + len(code)
 # it in the file and copies it into the pool, so the cave ceiling is not its
 # problem any more.  The host writes into the one-shot template block at
 # 0xC072F700 while the worker is running, which is why that is the ceiling.
-TEMPLATE_BLOCK = 0xC072F700
+TEMPLATE_BLOCK = fw(0xC072F700)
 if not args.loader and end > STATE:
     raise SystemExit(f'the fallback build\'s worker reaches the state block at '
                      f'0x{STATE:08X}: it ends at 0x{end:08X}')
@@ -1016,7 +1024,7 @@ if args.loader:
             _lh_word = to_words(assemble(HERE / 'asm' / 'loader.S', LOADER_DEFINES))[1]
             if _lh_word >> 24 != 0xEA:
                 sys.exit(f'loader +4 is 0x{_lh_word:08X}, not a branch to the hook')
-        _lh_site = 0xC03DA420
+        _lh_site = fw(0xC03DA420)
         _lh_bl = 0xEB000000 | (((_lh_at - _lh_site - 8) >> 2) & 0xFFFFFF)
         _sd += ['LOADER_HOOK=1' if args.loader_hook else 'LOADER_HOOK_OFF=1', f'LH_ENTRY_AT=0x{_lh_at:08X}',
                 f'LH_ENTRY_WORD=0x{_lh_word:08X}', f'LH_BL=0x{_lh_bl:08X}']
@@ -1125,7 +1133,7 @@ if args.loader:
         # This mode temporarily owns the redraw prologue until UI cleanup.
         # A payload that patches the same word needs a different integration.
         for addr, blob in secs:
-            if addr >= 0x40000000 and addr < 0xC0528704 and addr + len(blob) > 0xC0528700:
+            if addr >= 0x40000000 and addr < fw(0xC0528704) and addr + len(blob) > fw(0xC0528700):
                 sys.exit('payload section overlaps the four-box redraw pause')
     table = b''
     body = b''
@@ -1189,7 +1197,7 @@ if args.loader:
     print(f"binary : {binpath.name}  {len(binblob)} bytes, {len(secs)} section(s), "
           f"entry 0x{entry:08X}")
 
-ECHO_SLEEP_AT, ECHO_SLEEP_STOCK, ARM_NOP = 0xC04215F4, 0xEB00005D, 0xE320F000
+ECHO_SLEEP_AT, ECHO_SLEEP_STOCK, ARM_NOP = fw(0xC04215F4), 0xEB00005D, 0xE320F000
 lines = '\n'.join(out).split('\n')
 if args.strip_comments:
     lines = [l for l in lines if not l.startswith('#')]
@@ -1202,7 +1210,7 @@ if args.fast_echo:
     restore = [f'mem set 0x{ECHO_SLEEP_AT:08X} 0x{ECHO_SLEEP_STOCK:08X}'] * 3
     handoff = f'mem set 0x{ECHO_SLOT:08X} 0x'
     at = next((i for i, l in enumerate(lines) if l.startswith(handoff)
-               and 0xC0700000 <= int(l[len(handoff) - 2:], 16) < 0xC0800000), len(lines))
+               and fw(0xC0700000) <= int(l[len(handoff) - 2:], 16) < fw(0xC0800000)), len(lines))
     lines = ([f'mem set 0x{ECHO_SLEEP_AT:08X} 0x{ARM_NOP:08X}'] + lines[:at] + restore + lines[at:])
 if args.boot_markers:
     # After the fast-echo pass on purpose: that pass restores the per-character
@@ -1211,7 +1219,7 @@ if args.boot_markers:
     # the whole script.
     mcode = assemble(HERE / 'asm' / 'boot_marker.S',
                      [f'MARK_DATA=0x{MARK_DATA:08X}', f'MARK_SLOTS={MARK_SLOTS}',
-                      'F_TICK_US=0xC002B6E0'])
+                      f'F_TICK_US=0x{fw(0xC002B6E0):08X}'])
     if len(mcode) > MARK_DATA - MARK_AT:
         sys.exit(f'boot_marker.S is {len(mcode)} bytes; the code slot holds {MARK_DATA - MARK_AT}')
     mwords = to_words(mcode)

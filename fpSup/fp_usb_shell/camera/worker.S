@@ -201,7 +201,11 @@
 .equ OPT_CRC,     2               /* MEMW: the camera CRCs what landed         */
 .equ XFER_MAX,    0xFFFC00        /* 24-bit TRB length, rounded to 1 KiB       */
 .equ DMA_LO,      0x40000000
+#ifdef FPSUP_RAM_TOP
+.equ DMA_HI,      FPSUP_RAM_TOP   /* fp L: 2 GB, 0x40000000..0xBFFFFFFF        */
+#else
 .equ DMA_HI,      0x80000000
+#endif
 .equ WRITE_LO,    0x44000000
 .equ MEM_TMO,     500             /* ms, plus one per 32 KiB of the transfer  */
 
@@ -216,8 +220,37 @@
 .equ FRAME,       64
 .equ CHUNK,       44
 .equ BULK_MIN,    128             /* replies at least this big go in one transfer */
+#ifndef FPSUP_NO_UNCACHED_ALIAS
 .equ UNCACHED,    0x40000000
+#else
+/* The fp L: 2 GB of RAM and no uncached mirror -- 0x80000000..0xBFFFFFFF is the
+ * second gigabyte, so the mirror trick would read and write someone else's
+ * memory.  The frame is used at its own (cached) address and DSYNC_RANGE keeps the
+ * D-cache and the controller's DMA in step.  fwtarget.memory(). */
+.equ UNCACHED,    0
+#endif
 .equ TO_BUS,      0xC0000000      /* +0xC0000000 mod 2^32 == -0x40000000      */
+
+/* DSYNC_RANGE base, len: on a camera without the uncached mirror, clean and
+ * invalidate the D-cache over [base, base+len) by address (DCCIMVAC, to the
+ * point of coherency, which covers the L2) -- before the controller reads what
+ * the CPU wrote, and before the CPU reads what the controller wrote.  32-byte
+ * steps: the smallest line either core has; a 64-byte line is just done twice.
+ * Interrupts stay on.  NOT F_DCACHE: that walks all of L1 and L2 by set/way with
+ * IRQ and FIQ masked, and called every round it froze the fp L in live view
+ * (2026-11-02).  base and len must not be r0/r1; clobbers r0, r1.  Nothing on
+ * the fp, which reaches its frames through the uncached mirror. */
+.macro DSYNC_RANGE base, len
+#ifdef FPSUP_NO_UNCACHED_ALIAS
+    bic     r0, \base, #31
+    add     r1, \base, \len
+91: mcr     p15, 0, r0, c7, c14, 1
+    add     r0, r0, #32
+    cmp     r0, r1
+    blo     91b
+    dsb
+#endif
+.endm
 
 .macro LDA reg, value
     movw    \reg, #:lower16:\value
@@ -572,6 +605,12 @@ no_swap:
     bne     fault                       @ idle timeout: just arm again
 got_command:
     bl      out_owned
+#ifdef FPSUP_NO_UNCACHED_ALIAS
+    LDA     r2, FRAMEBUF                @ read what the DMA wrote, not a stale line:
+    ldr     r2, [r2]                    @ the whole OUT TRB, frame and upload data
+    movw    r3, #UP_OUT_MAX
+    DSYNC_RANGE r2, r3
+#endif
     mov     r0, #1
     str     r0, [r4, #0x34]             @ phase 1: a command arrived
     mov     r0, #0
@@ -1397,6 +1436,10 @@ arm_out_go:
     str     r1, [r0]                    @ magic
     str     r1, [r0, #4]                @ version, command, flags
     str     r1, [r0, #20]               @ "shl "
+#ifdef FPSUP_NO_UNCACHED_ALIAS
+    movw    r3, #UP_OUT_MAX
+    DSYNC_RANGE r6, r3                  @ no dirty line may land on the DMA later
+#endif
     mov     r0, #TO_BUS
     add     r5, r6, r0
     LDA     r0, TRB_OUT
@@ -1504,6 +1547,7 @@ crc_block:
 /* --- arm EP 0x82 IN with r9 bytes at r8, no copy -------------------------- */
 arm_in_block:
     push    {r4, r5, r6, r7, lr}
+    DSYNC_RANGE r8, r9                  @ what the CPU wrote, out to DRAM
     mov     r0, #TO_BUS
     add     r5, r8, r0
     LDA     r0, TRB_IN
@@ -1525,6 +1569,10 @@ arm_in:
     push    {r4, r5, r6, r7, lr}
     LDA     r0, FRAMEBUF
     ldr     r6, [r0]
+#ifdef FPSUP_NO_UNCACHED_ALIAS
+    mov     r3, #FRAME
+    DSYNC_RANGE r6, r3                  @ the reply frame, out to DRAM
+#endif
     mov     r0, #TO_BUS
     add     r5, r6, r0
     LDA     r0, TRB_IN

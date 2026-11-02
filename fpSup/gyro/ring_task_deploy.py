@@ -37,6 +37,8 @@ sys.path.insert(0, str(HERE.parent / 'fp_usb_shell'))
 
 import putfile as P                                            # noqa: E402
 from armasm import assemble, _compile, _parse                  # noqa: E402
+from fwtarget import fw                                       # noqa: E402
+import fwtarget                                               # noqa: E402
 
 # The task lives in the POOL, not the injection cave.  The cave is a hard 3900
 # bytes and the producers already take most of it; the task is reached by
@@ -46,8 +48,8 @@ from armasm import assemble, _compile, _parse                  # noqa: E402
 CODE_POOL_OFF = 0x44000
 JPOOL_POOL_OFF = 0x43000
 FOBJ_POOL_OFF = 0x42000
-F_CACHE = 0xC000E91C            # what makes freshly written pool code runnable
-POOL_PTR = 0xC3757A7C
+F_CACHE = fw(0xC000E91C)            # what makes freshly written pool code runnable
+POOL_PTR = fw(0xC3757A7C)
 JOB_COUNT = 32
 BUF_N, BUF_BYTES = 8, 0x4000
 JOB_SIZE = 24
@@ -80,7 +82,8 @@ def symbols(src, defines=()):
 
 
 def _check():
-    """The addresses here are duplicated from the assembly; prove they match."""
+    """The addresses here are duplicated from the assembly; prove they match.
+    Source against source, so both sides are the fp's addresses."""
     src = (HERE / 'ring_task.inc.S').read_text()
     # What is left is the firmware's own addresses and the writer's priority.
     # The task and block words are labels in the blob now -- there is no
@@ -124,7 +127,7 @@ def pool_base():
         raise SystemExit('the pool pointer read back differently three times: '
                          + ', '.join(f'0x{v:08X}' if v else str(v) for v in seen))
     pool = seen[0]
-    if not pool or not 0x40000000 <= pool < 0x50000000:
+    if not fwtarget.is_pool(pool):
         raise SystemExit(f'the pool pointer reads 0x{pool or 0:08X}')
     return pool
 
@@ -312,7 +315,7 @@ def place_code():
     # returns early if B_PTR[0] is already ours), so retrying is free.
     for attempt in range(3):
         echo_into(at['blocks_open'], 'blocks_open')
-        got = P.mem_get(0xC072EBA0, BUF_N)
+        got = P.mem_get(fw(0xC072EBA0), BUF_N)
         if got and all(got):
             break
         if attempt < 2:

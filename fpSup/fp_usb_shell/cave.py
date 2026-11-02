@@ -42,6 +42,7 @@ import pathlib
 import re
 import subprocess
 import time
+from fwtarget import fw                                       # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 FPSH = str(HERE / 'host' / 'fpsh')
@@ -50,31 +51,31 @@ FPSH = str(HERE / 'host' / 'fpsh')
 # Duplicated from build_autorun.py, which is where the cave map is decided.
 # _check_agrees() proves they match, the same way every other constant that
 # lives in two places is checked.
-CAVE_BUMP = 0xC072E060
-CAVE_ARENA = 0xC072E064
-CAVE_ARENA_END = 0xC072EFB4
-LOAD_DONE_US = 0xC072F6F8
+CAVE_BUMP = fw(0xC072E060)
+CAVE_ARENA = fw(0xC072E064)
+CAVE_ARENA_END = fw(0xC072EFB4)
+LOAD_DONE_US = fw(0xC072F6F8)
 
 # ------------------------------------------------------------------ the ABI
 # The resident worker's rendezvous words.  Fixed because the worker carries
 # them; declared here so six files stop spelling them out.
 ABI = {
-    'pool_ptr':  0xC072F050,   # the pool the worker was given
-    'pool_size': 0xC072F054,
-    'code_ptr':  0xC072F058,   # where the worker put its own code
-    'abort':     0xC072F080,   # the AutoRun abort flag
-    'pool_desc': 0xC072F6D8,   # the loader's allocator descriptor, 16 bytes
-    'load_start_us': 0xC072F6F4,
+    'pool_ptr':  fw(0xC072F050),   # the pool the worker was given
+    'pool_size': fw(0xC072F054),
+    'code_ptr':  fw(0xC072F058),   # where the worker put its own code
+    'abort':     fw(0xC072F080),   # the AutoRun abort flag
+    'pool_desc': fw(0xC072F6D8),   # the loader's allocator descriptor, 16 bytes
+    'load_start_us': fw(0xC072F6F4),
     'load_done_us':  LOAD_DONE_US,
-    'loader_svc': 0xC072F6FC,  # Loader v3: &svc while it runs entries, else 0 (sloader.h SL_SVC_AT)
-    'park_stub': 0xC072EFB4,
+    'loader_svc': fw(0xC072F6FC),  # Loader v3: &svc while it runs entries, else 0 (sloader.h SL_SVC_AT)
+    'park_stub': fw(0xC072EFB4),
     # Scratch inside the worker's block, in the gap above code_ptr (+0x58) and
     # below abort (+0x80).  console/fpstate.py's peek routine reaches these as
     # [r0, #0x64] and [r0, #0x68] with r0 = the state block, so they are
     # offsets into a block the worker owns and cannot be allocated.  They are
     # here so that "who owns this address" has an answer.
-    'peek_arg': 0xC072F064,
-    'peek_res': 0xC072F068,
+    'peek_arg': fw(0xC072F064),
+    'peek_res': fw(0xC072F068),
 }
 
 REGISTER = pathlib.Path(

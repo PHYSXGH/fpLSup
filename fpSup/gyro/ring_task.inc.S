@@ -222,7 +222,7 @@
  * The old header carried an integer 400 us, fast by 0.085 us on every sample:
  * 3.4 ms of drift across a forty-second take, and it keeps growing. */
 .equ GYR_PERIOD_PS,  400085400
-.equ GYR_GSCALE,     0x39109F6C     /* 0.000137923 dps per LSB                */
+.equ GYR_GSCALE,     0x39109F6C     /* 0.000137923 rad/s per LSB (0.0079 dps) */
 .equ GYR_ORIENT,     0x007A7978     /* "xyz", all three axes negated          */
 
 /* What the take was shot in, for the lens profile.  FUN_c032c720() is what

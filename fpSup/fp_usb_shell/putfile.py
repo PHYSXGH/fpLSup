@@ -34,6 +34,8 @@ repaired none.
 import argparse, os, pathlib, re, socket, struct, sys, time, zlib
 
 from armasm import assemble
+from fwtarget import fw                                       # noqa: E402
+import fwtarget                                               # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 SOCK = os.environ.get('FPSHD_SOCKET', '/tmp/fpshd.sock')
@@ -120,8 +122,8 @@ BULK_BATCH = 32                 # checkpoint before a lost command shifts a larg
 BULK_RETRIES = 6                # bounded whole-batch resends, never wordwise for drift
 UPLOAD_CHUNK = 0x3FC0           # 16 KiB OUT TRB minus the FPSH frame
 UPLOAD_RETRIES = 3             # retry only after a fresh worker status query
-ECHO_SLOT = 0xC0BAC2F8          # command table entry 17, echo's handler pointer
-ECHO_ORIG = 0xC03D99A0
+ECHO_SLOT = fw(0xC0BAC2F8)          # command table entry 17, echo's handler pointer
+ECHO_ORIG = fw(0xC03D99A0)
 # The WORKER's pool, not the card's.  0xC3757A7C was the one pool the AutoRun
 # asked for and everything shared; the worker asks the allocator for its own in
 # `spawn` now and leaves the address here, in the tail of the loader's reserved
@@ -132,7 +134,7 @@ ECHO_ORIG = 0xC03D99A0
 # asked for its own pool -- on those the loader published one at 0xC3757A7C and
 # everything shared it.  Being able to drive both is what makes an A/B between
 # an old card and a new one one variable instead of two.
-POOL_PTR  = int(os.environ.get('FPSUP_POOL_PTR', '0xC072F050'), 0)
+POOL_PTR  = int(os.environ['FPSUP_POOL_PTR'], 0) if 'FPSUP_POOL_PTR' in os.environ else fw(0xC072F050)
 POOL_SIZE_AT = POOL_PTR + 4     # what the worker asked for
 POOL_OFF  = 0x10000             # USB transfer scratch, past shell and gyro
 FOBJ_ROOM = 0x400
@@ -425,7 +427,7 @@ def staging_area():
     +0x2000 its capture buffer, +0x6000 the gyro logger, +0x10000 here.
     """
     got = mem_get(POOL_PTR)
-    if not got or not 0x40000000 <= got[0] < 0x50000000:
+    if not got or not fwtarget.is_pool(got[0]):
         raise SystemExit(f'0x{POOL_PTR:08X} does not hold a pool address ({got}). '
                          f'The worker publishes it when it starts; zero there '
                          f'means the allocator refused it and there is no worker.')
@@ -947,7 +949,7 @@ def put(addr, blob, label, passes=6, fast=False):
     # compared -- the same proof the passes below give, at link speed.  Only
     # where DMA reaches: the cave (0xC07xxxxx) is not, and goes the old way.
     # A refusal arms nothing, so falling back is safe; anything uncertain stops.
-    if 0x44000000 <= addr < 0x80000000 and mem_caps():
+    if 0x44000000 <= addr < fwtarget.ram_top() and mem_caps():
         try:
             mem_write(addr, blob, label=label)
         except RuntimeError as exc:

@@ -282,7 +282,7 @@ class Header(unittest.TestCase):
         for name in ('CAVE_BUMP', 'CAVE_ARENA_END'):
             asm = int(re.search(rf'^\.equ {name},\s*(0x[0-9A-Fa-f]+)',
                                 inc, re.M).group(1), 0)
-            py = int(re.search(rf'^{name}\s*=\s*(0x[0-9A-Fa-f]+)',
+            py = int(re.search(rf'^{name}\s*=\s*(?:fw\()?(0x[0-9A-Fa-f]+)',
                                ba, re.M).group(1), 0)
             self.assertEqual(asm, py, f'{name} disagrees between the two')
 
@@ -1317,6 +1317,9 @@ def _const(name, src, depth=0):
     if not m:
         raise AssertionError(f'build_autorun.py has no {name}')
     expr = m.group(1).strip()
+    fwm = re.fullmatch(r'fw\((0x[0-9A-Fa-f]+)\)(.*)', expr)   # the fp address, mapped per camera
+    if fwm:
+        expr = fwm.group(1) + fwm.group(2)
     mm = re.fullmatch(r'(\w+)(?:\s*\+\s*(0x[0-9A-Fa-f]+|\d+))?', expr)
     if mm and not mm.group(1).startswith('0'):
         base = _const(mm.group(1), src, depth + 1)

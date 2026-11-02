@@ -8,6 +8,7 @@ See research/display/notes/{BOOT_BANNER,SPLASH_BAND}.md for measured formats.
 import base64
 import struct
 import zlib
+from fwtarget import fw                                       # noqa: E402
 
 SCREEN_WIDTH = 1024
 # osdfile starts at (0,0). Progress updates need only the narrow logo rectangle;
@@ -15,11 +16,11 @@ SCREEN_WIDTH = 1024
 WIDTH, HEIGHT = 176, 56
 FRAME_BYTES = WIDTH * HEIGHT * 2
 ASSET_NAME = 'FPSUPUI'
-DRAW = 0xC0528700
+DRAW = fw(0xC0528700)
 DRAW_ORIGINAL = 0xE92D4BF0
 DRAW_PAUSED = 0xE12FFF1E
-ECHO_SLOT, ECHO_ORIGINAL = 0xC0BAC2F8, 0xC03D99A0
-DCACHE, ICACHE = 0xC000E91C, 0xC000EABC
+ECHO_SLOT, ECHO_ORIGINAL = fw(0xC0BAC2F8), fw(0xC03D99A0)
+DCACHE, ICACHE = fw(0xC000E91C), fw(0xC000EABC)
 HOLD_MS = 0
 # User reference: white fp and Sup pink sampled near #E03959.
 # Native 4-bit channels quantize the pink to #DD3355.

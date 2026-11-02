@@ -24,6 +24,18 @@ sys.path.insert(0, str(ROOT / "fp_usb_shell"))
 from armasm import assemble, symbols  # noqa: E402
 
 
+
+def _int_const(v):
+    """An int literal, or fw(<int literal>): sources spell the fp's address
+    and fw() maps it for another camera (fp_usb_shell/fwtarget.py)."""
+    import ast
+    if (isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id == 'fw'
+            and len(v.args) == 1):
+        v = v.args[0]
+    if isinstance(v, ast.Constant) and isinstance(v.value, int):
+        return v.value
+    return None
+
 class StopRaceTests(unittest.TestCase):
     def test_stop_rescan_never_closes_over_late_ready(self):
         """Enumerate every ordering of callback publication and writer scan."""
@@ -281,7 +293,7 @@ class ImageLayoutTests(unittest.TestCase):
         starting inside the running loader.
         """
         card = (HERE / "build_base_card.py").read_text()
-        m = re.search(r"^ENTRY_AT = (0x[0-9A-Fa-f]+)", card, re.M)
+        m = re.search(r"^ENTRY_AT = (?:fw\()?(0x[0-9A-Fa-f]+)", card, re.M)
         self.assertIsNotNone(m)
         entry_at = int(m.group(1), 0)
         loader = assemble(ROOT / "fp_usb_shell" / "asm" / "loader.S",
@@ -293,7 +305,7 @@ class ImageLayoutTests(unittest.TestCase):
 
     def test_the_shipping_build_guards_the_park_stub_itself(self):
         source = (HERE / "build_base_card.py").read_text()
-        self.assertIn("PARK_AT = 0xC072EFB4", source)
+        self.assertRegex(source, r"PARK_AT = (?:fw\()?0xC072EFB4")
         self.assertIn("if hi > PARK_AT:", source)
 
 
@@ -565,9 +577,9 @@ class ArenaTests(unittest.TestCase):
                 vals = ([node.value] if not isinstance(node.value, ast.Tuple)
                         else list(node.value.elts))
                 for v in vals:
-                    if (isinstance(v, ast.Constant) and isinstance(v.value, int)
-                            and self.LO <= v.value < self.HI):
-                        out.append(f'{f.name}:{node.lineno}: 0x{v.value:08X}')
+                    c = _int_const(v)
+                    if c is not None and self.LO <= c < self.HI:
+                        out.append(f'{f.name}:{node.lineno}: 0x{c:08X}')
         for f in sorted(ROOT.rglob('*.S')):
             if any(d in str(f) for d in self.SKIP_DIRS):
                 continue
@@ -607,9 +619,8 @@ class ArenaTests(unittest.TestCase):
                         vals = ([node.value] if not isinstance(node.value, ast.Tuple)
                                 else list(node.value.elts))
                         found = found or any(
-                            isinstance(v, ast.Constant)
-                            and isinstance(v.value, int)
-                            and self.LO <= v.value < self.HI for v in vals)
+                            _int_const(v) is not None
+                            and self.LO <= _int_const(v) < self.HI for v in vals)
             self.assertTrue(
                 found,
                 f'{name} no longer names an arena address -- drop its exemption')

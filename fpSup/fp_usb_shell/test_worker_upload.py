@@ -8,6 +8,7 @@ import unittest
 import zlib
 
 from armasm import assemble, symbols
+from fwtarget import fw                                       # noqa: E402
 
 try:
     from unicorn import Uc, UcError, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE
@@ -22,15 +23,22 @@ WORKER = HERE / 'camera' / 'worker.S'
 CODE = 0x60000000
 POOL = 0x45000000
 UNCACHED = POOL + 0x40000000
-STATE = 0xC072F000
+# Where the worker must see the frame the host's DMA wrote.  On the fp that is
+# the uncached mirror at +0x40000000 (1 GB of RAM, mirrored above it).  The
+# fp L has 2 GB and no mirror: +0x40000000 is other RAM, and the frame is at
+# the pool's own address (fwtarget.memory(), FPSUP_NO_UNCACHED_ALIAS).
+import fwtarget                                               # noqa: E402
+FRAME_VIEW = UNCACHED if fwtarget.memory()['uncached_alias'] else POOL
+STATE = fw(0xC072F000)
 STACK = 0x70000000
 DEST = POOL + 0x10000
-IMAGE = HERE.parents[1] / 'out' / 'MAIN_c0000000.bin'
+import fwtarget                                               # noqa: E402
+IMAGE = HERE.parents[1] / ('out' if fwtarget.target() == 'fp' else f'out_{fwtarget.target()}') / 'MAIN_c0000000.bin'
 # crc_block calls the firmware's own crc32 (worker.S FW_CRC32): a leaf in the
 # image and its table.  The real bytes are mapped, and execution may enter
 # that routine and nothing else outside the worker.
-FW_CRC32, FW_CRC32_END = 0xC06AE998, 0xC06AE9F8
-FW_TABLE = 0xC2E3B794
+FW_CRC32, FW_CRC32_END = fw(0xC06AE998), fw(0xC06AE9F8)
+FW_TABLE = fw(0xC2E3B794)
 
 
 def unicorn_runs():
@@ -81,19 +89,19 @@ class WorkerUploadTests(unittest.TestCase):
             uc.mem_write(CODE + offset, struct.pack('<I', word))
         uc.mem_map(POOL, 0x100000)
         uc.mem_map(UNCACHED, 0x4000)
-        uc.mem_map(STATE, 0x1000)
+        uc.mem_map(STATE & ~0xFFF, 0x2000)   # STATE need not be page-aligned (fp L: 0xC072CA80)
         uc.mem_map(STACK, 0x10000)
         img = IMAGE.read_bytes()
         for page in (FW_CRC32 & ~0xFFF, FW_TABLE & ~0xFFF):
             uc.mem_map(page, 0x2000)
             uc.mem_write(page, img[page - 0xC0000000:page - 0xC0000000 + 0x2000])
         uc.mem_write(STATE + 0x50, struct.pack('<I', POOL))
-        uc.mem_write(UNCACHED, incoming)
+        uc.mem_write(FRAME_VIEW, incoming)
         uc.mem_write(DEST, b'\xA5' * 64)
         if last is not None:
             uc.mem_write(POOL + 0x6900, struct.pack('<IIII', *last))
         uc.reg_write(UC_ARM_REG_R4, STATE)
-        uc.reg_write(UC_ARM_REG_R6, UNCACHED)
+        uc.reg_write(UC_ARM_REG_R6, FRAME_VIEW)
         uc.reg_write(UC_ARM_REG_SP, STACK + 0x8000)
         start = CODE + self.labels[entry]
         end = CODE + self.labels['reply_entry']
@@ -118,10 +126,10 @@ class WorkerUploadTests(unittest.TestCase):
         self.assertEqual(bytes(uc.mem_read(DEST, len(data))), data)
         self.assertEqual(struct.unpack('<IIII', uc.mem_read(POOL + 0x6900, 16)),
                          (101, DEST, len(data), zlib.crc32(data)))
-        self.assertEqual(struct.unpack('<IIII', uc.mem_read(UNCACHED + 20, 16)),
+        self.assertEqual(struct.unpack('<IIII', uc.mem_read(FRAME_VIEW + 20, 16)),
                          (0, DEST, len(data), zlib.crc32(data)))
         self.assertEqual(uc.reg_read(UC_ARM_REG_R9), 16)
-        self.assertEqual(uc.reg_read(UC_ARM_REG_R8), UNCACHED + 20)
+        self.assertEqual(uc.reg_read(UC_ARM_REG_R8), FRAME_VIEW + 20)
 
     def test_bad_crc_and_out_of_bounds_do_not_copy(self):
         data = bytes(range(64))
@@ -133,15 +141,15 @@ class WorkerUploadTests(unittest.TestCase):
                 uc = self.run_receiver(incoming)
                 self.assertEqual(bytes(uc.mem_read(DEST, 64)), b'\xA5' * 64)
                 self.assertEqual(bytes(uc.mem_read(POOL + 0x6900, 16)), b'\0' * 16)
-                self.assertEqual(struct.unpack('<I', uc.mem_read(UNCACHED + 20, 4))[0],
+                self.assertEqual(struct.unpack('<I', uc.mem_read(FRAME_VIEW + 20, 4))[0],
                                  code)
                 self.assertEqual(uc.reg_read(UC_ARM_REG_R9), 4)
 
     def test_capability_reports_last_accepted_tuple(self):
         last = (123, DEST, 64, 0xDEADBEEF)
         uc = self.run_receiver(bytes(64), entry='reply_upload_caps', last=last)
-        self.assertEqual(bytes(uc.mem_read(UNCACHED + 20, 4)), b'UP01')
-        self.assertEqual(struct.unpack('<IIII', uc.mem_read(UNCACHED + 24, 16)), last)
+        self.assertEqual(bytes(uc.mem_read(FRAME_VIEW + 20, 4)), b'UP01')
+        self.assertEqual(struct.unpack('<IIII', uc.mem_read(FRAME_VIEW + 24, 16)), last)
         self.assertEqual(uc.reg_read(UC_ARM_REG_R9), 20)
 
     def test_crc_guard_mutation_is_detected(self):

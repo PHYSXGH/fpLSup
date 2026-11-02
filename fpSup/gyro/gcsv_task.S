@@ -197,7 +197,9 @@ writer_openfile:
 #else
     bl      gcsv_header
 #endif
+#ifndef FPGYRO_NO_LENS_JSON
     bl      gcsv_json_write
+#endif
     b       9f
 
 8:  /* Nothing is built: try_open gives the object back on every rung it
@@ -784,5 +786,11 @@ gcsv_head2:
  * it; splitting two helpers out to save that is a change with more ways to be
  * wrong than bytes to gain. */
 #include "gcsv_rows.S"
+/* FPGYRO_NO_LENS_JSON: the profile's readout time, frame timing and crop come
+ * from the IMX410's own mode tables; a camera with another sensor (the fp L's
+ * IMX455) leaves the .json out until its tables are known, rather than write
+ * numbers Gyroflow would trust.  The fp build never defines it. */
+#ifndef FPGYRO_NO_LENS_JSON
 #include "gcsv_json.S"
 #include "gcsv_dist.S"
+#endif

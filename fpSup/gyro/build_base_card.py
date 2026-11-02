@@ -52,12 +52,14 @@ sys.path.insert(0, str(SHELL))
 sys.path.insert(0, str(HERE))
 
 from armasm import assemble, symbols                            # noqa: E402
+from fwtarget import fw                                       # noqa: E402
+import fwtarget as camera                                               # noqa: E402
 import imu_stream_deploy as S                                   # noqa: E402
 import ring_task_deploy as R                                    # noqa: E402
 
-ENTRY_AT = 0xC072E064      # the bottom of the cave, above the loader
-PARK_AT = 0xC072EFB4       # the shell's park stub; nothing of ours may reach it
-F_WRITE_AT = 0xC03660E8    # a previous session's diagnostic patch, restored
+ENTRY_AT = fw(0xC072E064)      # the bottom of the cave, above the loader
+PARK_AT = fw(0xC072EFB4)       # the shell's park stub; nothing of ours may reach it
+F_WRITE_AT = fw(0xC03660E8)    # a previous session's diagnostic patch, restored
 OUT = HERE / 'release' / 'base'
 
 
@@ -195,7 +197,7 @@ def sections(edition='base'):
     return out
 
 
-def launch(edition):
+def launch(edition, no_lens_json=False):
     """The logger's bootstrap with the edition's writer appended to it.
 
     One destination-zero section: stage2 leaves it where the file landed and
@@ -207,6 +209,9 @@ def launch(edition):
     the USB deploy uses, so the two blobs are the same bytes.
     """
     src, defines = EDITIONS[edition]
+    if camera.target() != 'fp' or no_lens_json:
+        # The .json's sensor numbers are the IMX410's; see gcsv_task.S.
+        defines = tuple(defines) + ('FPGYRO_NO_LENS_JSON=1',)
     code = assemble(HERE / src, defines)
     code = R.patch_offsets(code, symbols(HERE / src, defines))
     code += b'\x00' * (-len(code) % 4)
@@ -256,7 +261,7 @@ def check(secs):
                 f'loader staged the file in; that window is inside a buffer the '
                 f'loader now allocates for itself and hands back, so the two were '
                 f'not the same address space and the comparison meant nothing.)')
-        if not (0xC072D000 <= lo < 0xC0730000):
+        if not (fw(0xC072D000) <= lo < fw(0xC0730000)):
             continue                    # a patch in the firmware, not the cave
         if lo < ENTRY_AT:
             raise SystemExit(f'{w} at 0x{lo:08X} is inside the loader')
@@ -310,6 +315,9 @@ def main():
                     help='debug: passed to build_autorun.py (see there)')
     ap.add_argument('--four-box-bar', action='store_true',
                     help='passed to build_autorun.py')
+    ap.add_argument('--no-lens-json', action='store_true',
+                    help='leave the lens profile .json out (always so on a camera '
+                         'other than the fp); on the fp only for comparing builds')
     ap.add_argument('--banner', default=None,
                     help='override the screen banner; a merged card is not '
                          'the edition on its own and should not claim to be')
@@ -343,6 +351,8 @@ def main():
     # the camera, and "which build is in there" has been guessed at more than
     # once.
     banner = a.banner or f'fpSup-{BANNER[a.edition]}-{a.version}!'
+    if camera.target() != 'fp' and not a.banner:
+        banner = f'fpSup-{camera.target()}-{BANNER[a.edition]}-{a.version}!'
     # The power-off restore is every loader card's now (build_autorun always
     # adds it; hook_sites above is what puts these hooks in it).  --loader-hook
     # only adds the instant path, which the merge page's Fast Start 3 owns.
@@ -367,7 +377,7 @@ def main():
     # its first byte.  build_autorun puts it in the file and names it in the
     # header -- or, on a card that also carries the shell, in the trampoline
     # that calls both.
-    boot_blob, writer_len = launch(a.edition)
+    boot_blob, writer_len = launch(a.edition, a.no_lens_json)
     bf = tmp / 'gsup_launch.bin'
     bf.write_bytes(boot_blob)
     cmd += ['--boot-bin', f'{bf}:0']
@@ -388,8 +398,15 @@ def main():
     for at, blob, why in sorted(secs):
         where = ('pool + 0x%05X' % at) if at < 0x40000000 else '0x%08X' % at
         print(f'  {where:>16s}  {len(blob):5d}  {why}')
-    (out / 'README.txt').write_text(
-        READMES[a.edition].format(version=a.version))
+    readme = READMES[a.edition].format(version=a.version)
+    if camera.target() != 'fp':
+        readme = readme.replace(
+            'SIGMA fp firmware Ver.5.02 only',
+            f'{camera.NAMES[camera.target()]} only -- EXPERIMENTAL PORT.\n'
+            'This build writes the log but no lens profile .json: the profile\'s\n'
+            'readout time and crop come from sensor tables not yet worked out for\n'
+            'this camera.', 1)
+    (out / 'README.txt').write_text(readme)
     vshl = out / 'fpSup.BIN'
     autorun = out / 'AutoRun.txt'
     print(f'\n  {autorun}  {len(autorun.read_text().splitlines())} commands')

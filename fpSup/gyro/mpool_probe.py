@@ -14,6 +14,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / 'fp_usb_shell'))
+import fwtarget                                               # noqa: E402
 
 import putfile as P                                            # noqa: E402
 from armasm import assemble                                    # noqa: E402
@@ -52,7 +53,7 @@ def main():
     if end > CAVE_HI:
         raise SystemExit(f'0x{CODE_AT:08X}..0x{end:08X} runs into the park stub')
     pool = P.mem_get(POOL_PTR)[0]
-    if not pool or not 0x40000000 <= pool < 0x50000000:
+    if not fwtarget.is_pool(pool):
         raise SystemExit(f'the pool pointer reads 0x{pool or 0:08X}')
     obj, res = pool + POOL_OBJ_OFF, pool + RESULT_OFF
     print(f'code 0x{CODE_AT:08X}..0x{end:08X} ({len(code)} bytes)')

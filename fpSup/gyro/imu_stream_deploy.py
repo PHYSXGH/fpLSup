@@ -37,12 +37,14 @@ sys.path.insert(0, str(HERE.parent / 'fp_usb_shell'))
 
 import putfile as P                                            # noqa: E402
 from armasm import assemble                                    # noqa: E402
+from fwtarget import fw                                       # noqa: E402
+import fwtarget                                               # noqa: E402
 
 import imu_stream as S                                         # noqa: E402
 from ring_task_deploy import shared                            # noqa: E402
 
 # The injection cave, from notes/: loader.S below, park stub above.
-CAVE_LO, CAVE_HI = 0xC072E064, 0xC072EFA0
+CAVE_LO, CAVE_HI = fw(0xC072E064), fw(0xC072EFA0)
 
 # name -> (source, defines, hook site, firmware's word, thumb?)
 #
@@ -54,7 +56,7 @@ PRODUCERS = {
     # event this data has, so it is the only hook left that produces anything:
     # it drains the coprocessor's ring and then appends its own record, which is
     # what puts that record in the right place.
-    'accel': ('accel_hook.S',  (),            0xC050D4C8, 0xE3A02000, 0),
+    'accel': ('accel_hook.S',  (),            fw(0xC050D4C8), 0xE3A02000, 0),
     # gyro_drain.S and stream_space.S used to be here, at 0xC072E300 and
     # 0xC072EC60 -- 1,108 bytes of the 3,920-byte payload window, for code
     # NOTHING BRANCHES TO.  The firmware reaches every hook below by a branch
@@ -66,19 +68,19 @@ PRODUCERS = {
     # words are filled in from the blob's routine table -- by gsup_boot on a
     # card, by place_code() over USB.  Same two files, same symbols, one
     # layout; what changed is where they land.  (2026-09-22)
-    'start': ('rec_trigger.S', (),            0xC03790B8, 0xE5DB25CE, 0),
-    'stop':  ('rec_trigger.S', ('REC_STOP',), 0xC038C484, 0xE3500000, 0),
+    'start': ('rec_trigger.S', (),            fw(0xC03790B8), 0xE5DB25CE, 0),
+    'stop':  ('rec_trigger.S', ('REC_STOP',), fw(0xC038C484), 0xE3500000, 0),
     # The STILL/CINE mode being set.  Not part of the stream at all: it decides
     # which way up a take's frames say they are, which has to happen long
     # before the take.  Base does not arm it -- see mode_hook.S.
-    'mode':  ('mode_hook.S',   (),            0xC0058310, 0xE1A05001, 0),
+    'mode':  ('mode_hook.S',   (),            fw(0xC0058310), 0xE1A05001, 0),
 }
 
 
 VENEER_LDR = 0xE51FF004      # ldr pc, [pc, #-4] -- the word after it is the target
 
 
-CAVE_BUMP, CAVE_ARENA_END = 0xC072E060, 0xC072EFB4
+CAVE_BUMP, CAVE_ARENA_END = fw(0xC072E060), fw(0xC072EFB4)
 VEN = {}                     # name -> where this deploy's veneer landed
 
 
@@ -91,7 +93,7 @@ def cave_alloc(n, what):
     the next reboot, which is cheaper than guessing where the last ones went.
     """
     base = (P.mem_get(CAVE_BUMP) or [0])[0]
-    if not base or not 0xC072D000 <= base < CAVE_ARENA_END:
+    if not base or not fw(0xC072D000) <= base < CAVE_ARENA_END:
         raise SystemExit(f'the cave bump reads 0x{base or 0:08X} -- stage2 did '
                          f'not initialise it, so this card predates the allocator')
     if base + n > CAVE_ARENA_END:
@@ -142,7 +144,7 @@ def branch_word(site, target, thumb):
 # Must agree with imu_stream.inc.S; _check_header() proves they do.
 GYRO_RING_SPAN = 0x12C0
 BUF_N, BUF_BYTES = 8, 0x4000
-POOL_PTR      = 0xC3757A7C
+POOL_PTR      = fw(0xC3757A7C)
 
 
 
@@ -174,9 +176,15 @@ def _check_header():
             text = text.split('#ifdef REC_STOP')[1].split('#else')[0]
         elif '#ifdef REC_STOP' in text:
             text = text.split('#else')[1].split('#endif')[0]
-        if f'{site:#010X}'.replace('0X', '0x') not in text.replace('0X', '0x'):
-            if f'0x{site:08X}' not in text:
-                raise SystemExit(f'{name}: {source} does not mention site 0x{site:08X}')
+        # The source names the fp's site; on another camera, the site it maps to.
+        named = set()
+        for h in re.findall(r'\b0[xX][0-9A-Fa-f]{8}\b', text):
+            try:
+                named.add(fw(int(h, 16)))
+            except SystemExit:
+                pass
+        if site not in named:
+            raise SystemExit(f'{name}: {source} does not mention site 0x{site:08X}')
         if f'0x{orig:08X}' not in text:
             raise SystemExit(f'{name}: {source} does not mention its displaced '
                              f'word 0x{orig:08X}')
@@ -280,7 +288,7 @@ def resolve_ring():
               + ', '.join(f'0x{v:08X}' if v else str(v) for v in seen))
         return None
     pool = seen[0]
-    if not pool or not 0x40000000 <= pool < 0x50000000:
+    if not fwtarget.is_pool(pool):
         print(f'the pool pointer reads 0x{pool or 0:08X}')
         return None
     ring = pool + RING_POOL_OFF
@@ -390,7 +398,7 @@ def reset():
     # B_PTR is NOT cleared: it holds the allocator's pointers and they are
     # held for the session.  Clearing it once leaked 128 KiB and made take_open
     # decline every take.  Only the busy flags and the fill state reset.
-    P.put_slow(0xC072EBC0, struct.pack('<%dI' % BUF_N, *([0] * BUF_N))
+    P.put_slow(fw(0xC072EBC0), struct.pack('<%dI' % BUF_N, *([0] * BUF_N))
                + struct.pack('<6i', -1, 0, 0, 0, 0, 0), 'block state')
 
     # NOT the call-throughs.  Clearing counters must not undo --stage: this

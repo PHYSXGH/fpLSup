@@ -5,6 +5,7 @@ script that wanted only this list rebuilt AutoRun.txt as a side effect, in
 whichever mode was the default. That happened twice in one evening, once
 replacing a loader build with a classic one nobody asked for.
 """
+from fwtarget import fw                                       # noqa: E402
 
 # Two different jobs, and they used to be one list.  The first patch is what
 # makes the channel reachable at all: with the interface still declaring itself
@@ -16,7 +17,7 @@ replacing a loader build with a classic one nobody asked for.
 # were bundled, and --no-ep-patches dropped all seven, so the first debug card
 # anyone tried to talk to could not be talked to (macOS: ptpcamerad had it).
 IFACE = [
-    (0xC0CF3740, 0xFFFFFF03,
+    (fw(0xC0CF3740), 0xFFFFFF03,
      "PTP interface template: {bNumEndpoints, class, subclass, protocol}",
      "03/06/01/01 -> 03/ff/ff/ff.  Lengths and the endpoint set are untouched;",
      "this only stops the host's PTP stack from claiming interface 0 before the",
@@ -28,8 +29,8 @@ IFACE = [
 # ~240 MB/s whatever its length (2026-10-06); 16-packet bursts are what a
 # 5 Gb/s bulk pipe needs to go further.  Loader v3 shell sup only; untested.
 BURST15 = [
-    (0xC0CF3748, 0x000F3006, "EP 0x01 OUT SuperSpeed companion: bMaxBurst 3 -> 15"),
-    (0xC0CF3750, 0x000F3006, "EP 0x82 IN SuperSpeed companion: bMaxBurst 3 -> 15"),
+    (fw(0xC0CF3748), 0x000F3006, "EP 0x01 OUT SuperSpeed companion: bMaxBurst 3 -> 15"),
+    (fw(0xC0CF3750), 0x000F3006, "EP 0x82 IN SuperSpeed companion: bMaxBurst 3 -> 15"),
 ]
 
 # The firmware's own PTP receiver, off.  usbTask (FUN_c0033b80) answers every
@@ -42,7 +43,7 @@ BURST15 = [
 # speaks PTP to it: nothing is lost.  This is the only call site; the other mode
 # branches beside it are untouched.  Shell sup only (v3), restored at power-off.
 NOPTP = [
-    (0xC0033B3C, 0xE3A00000,
+    (fw(0xC0033B3C), 0xE3A00000,
      "FUN_c0033ad0 mode 5: BL FUN_c04db778 (PTP receive) -> mov r0, #0"),
     # The driver half of the same receiver.  On an XferNotReady for a bulk OUT
     # (the host sending before anything is armed), whoever waits on "any event"
@@ -53,17 +54,17 @@ NOPTP = [
     # in ~300 MEM1 round trips, found whole in that buffer (camera, 2026-10-06).
     # Thumb `beq` (skip when busy) -> `b` (always skip); the next halfword,
     # `mov r0, r5`, is unchanged.  EP0 and IN branches are elsewhere.
-    (0xC01E7704, 0x4628E01E,
+    (fw(0xC01E7704), 0x4628E01E,
      "FUN_c01e76b8: beq (OUT_BUSY) -> b, never auto-arm bulk OUT on [0xC3025744]"),
 ]
 
 PUSH = [
-    (0xC0CF3780, 0x02830507, "EP 0x83, SuperSpeed: interrupt -> bulk"),
-    (0xC0CF3784, 0x00000400, "EP 0x83, SuperSpeed: wMaxPacketSize 64 -> 1024, bInterval 11 -> 0"),
-    (0xC0CF3758, 0x00033006, "its SuperSpeed companion: bMaxBurst 0 -> 3"),
-    (0xC0CF375C, 0x00000000, "its SuperSpeed companion: wBytesPerInterval 64 -> 0"),
-    (0xC0CF3798, 0x02830507, "EP 0x83, full speed: interrupt -> bulk"),
-    (0xC0CF379C, 0x00000040, "EP 0x83, full speed: bInterval 100 -> 0"),
+    (fw(0xC0CF3780), 0x02830507, "EP 0x83, SuperSpeed: interrupt -> bulk"),
+    (fw(0xC0CF3784), 0x00000400, "EP 0x83, SuperSpeed: wMaxPacketSize 64 -> 1024, bInterval 11 -> 0"),
+    (fw(0xC0CF3758), 0x00033006, "its SuperSpeed companion: bMaxBurst 0 -> 3"),
+    (fw(0xC0CF375C), 0x00000000, "its SuperSpeed companion: wBytesPerInterval 64 -> 0"),
+    (fw(0xC0CF3798), 0x02830507, "EP 0x83, full speed: interrupt -> bulk"),
+    (fw(0xC0CF379C), 0x00000040, "EP 0x83, full speed: bInterval 100 -> 0"),
 ]
 
 
@@ -96,7 +97,7 @@ PUSH = [
 # see whether the cave survives.  See
 # research/firmware/notes/DRAM_SELF_REFRESH_AND_WARM_BOOT.md.
 RETAIN = [
-    (0xC00239C8, 0xE3A00B2A,
+    (fw(0xC00239C8), 0xE3A00B2A,
      "SelfRefreshSetting default stop time: mov r0,#0x384 (900 s, 15 min) ->",
      "mov r0,#0xA800 (43008 s, 11.95 h).  Holds DRAM in self-refresh across a",
      "soft power-off for twelve hours instead of fifteen minutes, which is what",
@@ -106,9 +107,9 @@ RETAIN = [
 PATCHES = IFACE + PUSH        # both, for a USB development build
 
 SCREEN = [
-    (0xC0BB1208, 0xFFFFF8B2, "text colour"),
-    (0xC03E46A0, 0xE3A05078, "mov r5,#120 — x, clear of the battery indicator"),
-    (0xC03E4698, 0xE3A08010, "mov r8,#16  — y"),
+    (fw(0xC0BB1208), 0xFFFFF8B2, "text colour"),
+    (fw(0xC03E46A0), 0xE3A05078, "mov r5,#120 — x, clear of the battery indicator"),
+    (fw(0xC03E4698), 0xE3A08010, "mov r8,#16  — y"),
 ]
 
 BAR_WIDTH = 8
