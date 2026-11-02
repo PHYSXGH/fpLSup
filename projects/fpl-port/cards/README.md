@@ -188,3 +188,34 @@ On the camera (battery pulled first): no reply until the USB cable was unplugged
 shell README says), then ping ok; MCAPS pool 0x45319B80; is_pool ok; MEM1 read of the worker frame returns
 the `FPSH` header; read-only window at 0x90000000 GRANTED, 256 B read (`0000ffff…`), revoked; windows empty;
 ping ok after.
+
+### Fast Start settings block (2026-11-02): checked, persistence not yet tested
+
+- Static: the save routine fp 0xC0022548 → fp L 0xC0022468 is identical (type id 9, size 0x410, no checksum).
+  The surrounding settings code fp 0xC0020860..0xC0025778 differs only by relocations: 709 of 5,062 words,
+  435 branches and 274 movw/movt address halves, no constant or offset changed.
+- Live (r4, read only): XC_CommonSaveData at 0xC30751FC, 260 words. +0x28..+0x200, the loader's region, is
+  all zero; 39 non-zero words (fp 42) at +0x10..+0x20 (timestamps at +0x18/+0x1C as on the fp),
+  +0x280..+0x28C and +0x380..+0x40C, i.e. exactly the gaps between the fp's measured safe ranges.
+  Backup: `projects/fpl-port/private/commonsave_fpl_20261102.json` (not committed).
+- Not done: the fp's persistence measurement (write a pattern into +0x28..+0x200, power cycle with the switch,
+  read it back, restore). Until then `--store-boot` / `--loader-hook` stay refused on the fp L.
+
+### Fast Start settings block: persistence confirmed (2026-11-02)
+
+`projects/fpl-port/tools/commonsave_probe.py`, r4 card, one daemon at a time:
+1. check: +0x28..+0x200 (118 words) all zero.
+2. arm: 0xA5000000|offset written into all 118 words, each read back.
+3. Power switch off/on: all 118 markers back at their own offsets, none cleared or moved. The block is inside
+   the range boot clears (0xC3000000..0xC38D6A70), so they came from flash. Outside the region only +0x1C
+   (the save time) changed.
+4. restore: the region written back to zero from the backup, read back.
+5. Power switch off/on: all 118 words zero. The camera is as it was.
+
+XC_CommonSaveData and STORE are `camera` rows. Still refused on the fp L: `--store-boot` / `--loader-hook`.
+The block is confirmed, but the Fast Start loader hook (site 0xC03DA420, the AutoRun abort) has not run under
+emulation or on the fp L.
+
+Open issue (USB shell on the fp L): after some idle time, or after the daemon is restarted, the worker
+sometimes stops answering until the USB cable is replugged. Seen 3 times; replugging fixed it every time.
+Once the camera did not enumerate at all after a power cycle until the cable was replugged.
