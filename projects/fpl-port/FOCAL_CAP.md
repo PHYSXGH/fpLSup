@@ -74,3 +74,10 @@ against 2425.4 / 2433.5.
 
 The same question applies to the fp's own modes that read 6064 columns (capped at 6000 there). It was never
 tested on the fp either.
+
+## Evidence from the camera itself (2026-11-03)
+
+The fp L's crop records (`LENS_TABLES.md`, "Crop") put the 1.00× frame at **9520 × 6328**, and the DNGs'
+FocalPlaneXResolution for the 1.53 / 2.0 / 2.5× crops is the 1.00× value × 9520 / crop width exactly. So the
+camera's own convention for full-width video is 9520 columns: the cap. That is what the camera assumes,
+not a measurement of the picture; the still-vs-video test above would still settle what the frame shows.

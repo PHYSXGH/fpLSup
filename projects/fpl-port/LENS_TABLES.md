@@ -273,3 +273,44 @@ Reading: while the lens is still, the camera's correction uses the reported foca
 side when the lens sits near a tenth's edge. During zooming it mixes states. The gyro profile is computed
 once at take start from the getters, so it carries at most that tenth (≤ ~1–2 px at the 4K corner on the
 wide end, usually less). No finer zoom value was found. Left as is.
+
+## Crop: the video crop menu, and what s really is (2026-11-03)
+
+Clips A001_117–120, 28-70 at 28 mm, F5.6, ∞, 4K 23.976, crop menu 1.0 / 1.53 / 2.0 / 2.5×:
+
+| clip | menu | sensor mode | s from the DNG | camera crop (s ratio) | DNG FocalPlaneXResolution |
+|---|---|---|---|---|---|
+| A001_117 | 1.0× | 161 (9568 read) | 0.993564 | 1.0000 | 2724.83 |
+| A001_118 | 1.53× | **187** (8208 read) | 0.651063 | 1.5261 | 4157.12 (× 1.52564) |
+| A001_119 | 2.0× | **187** | 0.497554 | 1.9969 | 5440.53 (× 1.99665) |
+| A001_120 | 2.5× | **187** | 0.400743 | 2.4793 | 6755.32 (× 2.47917) |
+
+Each DNG is the block at the lens state × s^(2j) exactly (≤ 1e-18) with **s = frame half-diagonal / 21.63**.
+So s is not a constant: the earlier takes were all full width. The crops past 1.53× are digital: mode 187
+reads 8208 columns for all three.
+
+The camera's crop steps: RAM table 0xC2F28BB4 (filled at boot by fp L 0xC02D7BC0 from the doubles at
+0xC02D7CE8), 24 records of 24 bytes: u32 crop×100, u32 100, u32 width, u32 height, f64 half-diagonal mm.
+1.00× 9520×6328 21.4908 … 1.53× 6240×4144 14.0825 … 2.00× 4768×3168 10.7621 … 2.48× (menu "2.5") 3840×2552
+8.6681 … 3.18× 2992×1992 6.7576; half-diagonal = diagonal/2 × 3.76 µm. **The current one** is at
+**0xC308EA60** (object 0xC308A670, FUN_c00530f0, +0x4268 via vt+0x3C, +0xC via vt+0x18, +0x17C; the lens
+module copies it at 0xC00442A8 and divides its half-diagonal by 21.63 at 0xC0044374). Read live: 2.48 →
+1.00 → 1.53× followed the menu.
+
+The DNG's FocalPlaneXResolution scales by 9520 / record width exactly, so in a crop the frame covers the
+record's width of the sensor: 6240 / 4768 / 3840 columns, not mode 187's 8208.
+
+**The profile before the fix** used mode 187's 8208 for all three: crop 1.159 and focal 3496 px at 28 mm,
+where the camera's numbers give ~4577 / 5989 / 7436 px (31–113 % off), and the full-frame s.
+
+**Fixed (fp L, `FPSUP_CROP_RECORD_AT`):** `gcsv_json.S j_crop_cols`: above 1.00× the covered width is the
+record's (crop factor and focal); `distfit.inc.S`: s = record half-diagonal / 21.63 (the firmware's 1.00×
+double if the record looks wrong). 1.00× is unchanged. Tests: `FpLBlock` (A001_117–120 exact, 0.0) and
+`CropProfile` (focal ratio against the DNGs' FocalPlaneXResolution within 5e-4); mutations of either part
+fail them. Card `…-dist4`.
+
+**For the focal cap (`FOCAL_CAP.md`):** at 1.00× the camera's own record is the still area, 9520 wide, and the
+crop ratios in the DNGs come out exactly against 9520 (9520/6240 = 1.52564, the FocalPlaneXResolution
+ratio), not against 9568 or 9552. The camera's optics math treats the full-width video frame as the
+9520-column still image, i.e. it caps. The profile still leaves 1.00× uncapped (your choice, pending the
+test).

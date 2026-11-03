@@ -423,3 +423,7 @@ Copied to the card 2026-11-03 (replacing the log-blend fpSup.BIN `bf57d748…`);
 
 Card `20261103-fast3-gyro-debug-noptp-dist3`: dist2 plus the four-coefficient fit (`../LENS_TABLES.md`, "Four
 fitted coefficients"). fpSup.BIN `8f23935f…`, AutoRun.txt unchanged (`1bfd1c39…`). Copied to the card 2026-11-03.
+
+Card `20261103-fast3-gyro-debug-noptp-dist4`: dist3 plus the video crop menu (`../LENS_TABLES.md`, "Crop"):
+in a crop the profile's crop factor, focal and distortion follow the camera's crop record. fpSup.BIN
+`5a46dc40…`, AutoRun.txt unchanged (`1bfd1c39…`). fp builds byte-identical. Copied to the card 2026-11-03.

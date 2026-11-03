@@ -458,10 +458,27 @@ pg_dist_kr:
     vmrs    APSR_nzcv, fpscr
     bge     99f
 
-    /* kr_j x s^(2j), s from the firmware's own two doubles */
-    ldr_addr r0, FPSUP_DIST_HALFDIAG_AT
+    /* kr_j x s^(2j), s = the frame's half-diagonal / 21.63 mm.  The half-
+     * diagonal is the current crop's (record +16: 21.4908 at 1.00x, 14.0825 at
+     * 1.53x ...), which is what the camera's DNG uses (A001_117..120); the
+     * firmware's 1.00x double when the record looks wrong. */
     ldr_addr r1, FPSUP_DIST_REF_AT
+    ldr_addr r0, FPSUP_CROP_RECORD_AT
+    ldr     r2, [r0, #4]
+    cmp     r2, #100                    /* a crop record says x / 100 */
+    bne     61f
+    add     r0, r0, #16
     vldr    d0, [r0]
+    vldr    d1, kr_hd_lo
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    blt     61f
+    vldr    d1, kr_hd_hi
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    blt     62f
+61: ldr_addr r0, FPSUP_DIST_HALFDIAG_AT
+62: vldr    d0, [r0]
     vldr    d1, [r1]
     vcmp.f64 d1, #0.0
     vmrs    APSR_nzcv, fpscr
@@ -495,12 +512,14 @@ pg_dist_kr:
     pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
 
     .align  3
-pg_s_lo: .double 0.8
+pg_s_lo: .double 0.25                /* 3.18x crop: 0.312 */
 pg_s_hi: .double 1.25
 kr_zero:    .double 0.0                 /* this routine's own: the file's pool */
 kr_half:    .double 0.5                 /* is out of vldr reach from here      */
 kr_onehalf: .double 1.5
 kr_2p24:    .double 16777216.0
+kr_hd_lo:   .double 5.0                 /* a crop's half-diagonal, mm: 3.18x is */
+kr_hd_hi:   .double 22.0                /* 6.76, 1.00x 21.49                    */
 
 /* pg_count -- r0 = u32 list, r1 = how many at most.  r0 = entries before the
  * first 0xFFFF / 0x7FFFFFFF / 0xFFFFFFFF.  Clobbers r1-r3, ip. */

@@ -235,9 +235,48 @@ j_geom:
     pop     {r4, lr}
     bx      lr
 
+#ifdef FPSUP_CROP_RECORD_AT
+/* j_crop_cols -- the sensor columns the camera's digital crop leaves, or 0 when
+ * there is none (1.00x) or the record does not look like one.
+ *
+ * The fp L's video crop menu (1.53x, 2.0x, 2.5x ...) keeps one sensor mode (187,
+ * 8208 columns read) and crops the rest digitally.  Its current step is a
+ * record the lens module also reads: crop x100, 100, width, height in pixels
+ * of the 9520 x 6328 still area, half-diagonal (projects/fpl-port/
+ * LENS_TABLES.md, "Crop").  The DNG's FocalPlaneXResolution scales with that
+ * width exactly (A001_118..120). */
+j_crop_cols:
+    movw    ip, #:lower16:FPSUP_CROP_RECORD_AT
+    movt    ip, #:upper16:FPSUP_CROP_RECORD_AT
+    ldr     r1, [ip, #4]                @ the denominator: always 100
+    cmp     r1, #100
+    bne     8f
+    ldr     r1, [ip]                    @ crop x100
+    cmp     r1, #100
+    bls     8f                          @ 1.00x: no digital crop
+    cmp     r1, #400
+    bhi     8f
+    ldr     r0, [ip, #8]                @ width in pixels
+    cmp     r0, #256
+    blo     8f
+    movw    r1, #:lower16:SENSOR_ACTIVE_W
+    cmp     r0, r1
+    bxlo    lr
+8:  mov     r0, #0
+    bx      lr
+#endif
+
 /* j_covered -- r0 = mode -> the sensor columns the mode images. */
 j_covered:
     push    {r4, lr}
+#ifdef FPSUP_CROP_RECORD_AT
+    mov     r4, r0                      @ the mode, for j_geom below
+    bl      j_crop_cols                 @ a digital crop decides, when there is one
+    cmp     r0, #0
+    popne   {r4, lr}
+    bxne    lr
+    mov     r0, r4
+#endif
     bl      j_geom
     ldr     r1, [r0, #4]                @ readout width
     ldr     r2, [r0, #0x44]             @ horizontal binning
@@ -257,6 +296,14 @@ j_covered:
  * it into the frame.  Not verified on the fp L: projects/fpl-port/FOCAL_CAP.md. */
 j_covered_raw:
     push    {r4, lr}
+#ifdef FPSUP_CROP_RECORD_AT
+    mov     r4, r0
+    bl      j_crop_cols                 @ cropped: the crop's width, not the readout
+    cmp     r0, #0
+    popne   {r4, lr}
+    bxne    lr
+    mov     r0, r4
+#endif
     bl      j_geom
     ldr     r1, [r0, #4]                @ readout width
     ldr     r2, [r0, #0x44]             @ horizontal binning

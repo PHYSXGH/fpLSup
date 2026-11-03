@@ -294,12 +294,33 @@ class FpLBlock(unittest.TestCase):
                      (0.9995036716883677, -0.11709433747747322, 0.04886474862883644, 0.016547001432334743), 1e-6),
         'A001_112': ('2870', 700, 5120, 0x7FFFFFFF,
                      (0.95702733946746, 0.031839633276628705, 0.010881002164221141, -0.0005562992758673428), 1e-6),
+        # Video crop menu, 28 mm F5.6 at infinity: 1.0x is mode 161, 1.53 / 2.0 / 2.5x
+        # are all mode 187 with a digital crop.  The last field is the crop record.
+        'A001_117': ('2870', 280, 5120, 0x7FFFFFFF,
+                     (0.9995036716883677, -0.11709433747747322, 0.04886474862883644, 0.016547001432334743), 1e-6, 100),
+        'A001_118': ('2870', 280, 5120, 0x7FFFFFFF,
+                     (0.9995036716883677, -0.05027934726133715, 0.00900955090609069, 0.001310027813091312), 1e-6, 153),
+        'A001_119': ('2870', 280, 5120, 0x7FFFFFFF,
+                     (0.9995036716883677, -0.029364583080783675, 0.0030730636801397696, 0.00026096552638481783), 1e-6, 200),
+        'A001_120': ('2870', 280, 5120, 0x7FFFFFFF,
+                     (0.9995036716883677, -0.01904914005510629, 0.0012932266073705171, 7.124226984885495e-05), 1e-6, 248),
         'A001_113': ('2870', 420, 5120, 0x7FFFFFFF,
                      (0.9800598984996695, -0.010911095117816644, 0.029359395770969722, 0.0005269313715978199), 1e-6),
     }
     DUMPS = {'45': 'lensram_0xC3079000_45mmF2.8DGDN_20261103.bin',
              '2870': 'lensram_0xC3079000-0xC3084000_28-70mm_at28_20261103.bin'}
     STUBS = {'focal': 0xC0362BF0, 'av': 0xC0362370, 'fpos': 0xC035FF60, 'fdist': 0xC0360020}
+    # The camera's crop records (RAM table 0xC2F28BB4, read live 2026-11-03):
+    # crop x100 -> (width, height, half-diagonal mm).
+    CROPS = {100: (9520, 6328, 21.49079172691411), 153: (6240, 4144, 14.082484566240433),
+             200: (4768, 3168, 10.762084261480208), 248: (3840, 2552, 8.668064931551909)}
+    CROP_AT = 0xC308EA60
+
+    @classmethod
+    def crop_record(cls, key):
+        import struct
+        w, h, hd = cls.CROPS[key]
+        return struct.pack('<4Id', key, 100, w, h, hd)
 
     @classmethod
     def setUpClass(cls):
@@ -329,7 +350,7 @@ class FpLBlock(unittest.TestCase):
                 os.environ['FPSUP_CAMERA'] = old
         cls.Uc, cls.ARM = Uc, (UC_ARCH_ARM, UC_MODE_ARM)
 
-    def run_kr(self, dump, focal, av, mm, block=None):
+    def run_kr(self, dump, focal, av, mm, block=None, crop=100, record=None):
         import struct
         from unicorn import arm_const as A
         uc = self.Uc(*self.ARM)
@@ -342,6 +363,8 @@ class FpLBlock(unittest.TestCase):
             ram[0xC307B9D4 - self.BASE:0xC307B9D4 - self.BASE + len(block)] = block
         uc.mem_map(self.BASE, (len(ram) + 0xFFF) & ~0xFFF)
         uc.mem_write(self.BASE, bytes(ram))
+        uc.mem_map(self.CROP_AT & ~0xFFF, 0x1000)
+        uc.mem_write(self.CROP_AT, record if record is not None else self.crop_record(crop))
 
         def ret(at, value):                     # movw r0 / movt r0 / bx lr
             v = value & 0xFFFFFFFF
@@ -364,13 +387,20 @@ class FpLBlock(unittest.TestCase):
         return uc.reg_read(A.UC_ARM_REG_R0), struct.unpack('<4d', uc.mem_read(out, 32))
 
     def test_every_take_reproduces_its_dng(self):
-        for take, (dump, focal, av, mm, want, tol) in self.TAKES.items():
+        for take, (dump, focal, av, mm, want, tol, *crop) in self.TAKES.items():
             with self.subTest(take):
-                ok, kr = self.run_kr(dump, focal, av, mm)
+                ok, kr = self.run_kr(dump, focal, av, mm, crop=crop[0] if crop else 100)
                 self.assertEqual(ok, 1)
                 worst = max(abs(a - b) for a, b in zip(kr, want))
                 self.assertLess(worst, tol, f'{take}: {kr} vs {want}')
                 print(f'  {take}: worst {worst:.1e}')
+
+    def test_a_bad_crop_record_falls_back_to_full_frame(self):
+        import struct
+        full = self.run_kr('2870', 280, 5120, 0x7FFFFFFF, crop=100)
+        for bad in (bytes(24), struct.pack('<4Id', 153, 100, 6240, 4144, 99.0),
+                    struct.pack('<4Id', 153, 7, 6240, 4144, 14.08)):
+            self.assertEqual(self.run_kr('2870', 280, 5120, 0x7FFFFFFF, record=bad), full)
 
     def test_s_is_the_firmwares_two_doubles(self):
         import struct
@@ -451,8 +481,10 @@ class FitOnArm(unittest.TestCase):
     def test_matches_the_mirror_and_the_dng(self):
         focal = {'A001_100': 45, 'A001_101': 45, 'A001_102': 45, 'A001_103': 45, 'A001_104': 28,
                  'A001_105': 28, 'A001_106': 50, 'A001_107': 35, 'A001_108': 60, 'A001_109': 45,
-                 'A001_110': 30, 'A001_111': 28, 'A001_112': 70, 'A001_113': 42}
+                 'A001_110': 30, 'A001_111': 28, 'A001_112': 70, 'A001_113': 42, 'A001_117': 28}
         for take, row in FpLBlock.TAKES.items():
+            if len(row) > 6 and row[6] != 100:
+                continue            # cropped: the frame covers less; CropProfile
             with self.subTest(take):
                 kr = row[4]
                 w, h = self.FRAMES.get(take, (3856, 2170, None))[:2]
@@ -468,3 +500,87 @@ class FitOnArm(unittest.TestCase):
             ok, k = self.fit(kr, S)
             self.assertEqual(ok, 1)
             self.assertLess(max(abs(a - b) for a, b in zip(k, asm_fit(kr, S))), 1e-9)
+
+
+class CropProfile(unittest.TestCase):
+    """The .json's crop factor and focal length under the fp L's video crop menu,
+    from the assembled gcsv_task.S (j_crop_milli, j_focal_milli) with the
+    geometry lookup and the crop record stubbed.
+
+    Ground truth is the camera's: the DNG's FocalPlaneXResolution, which scales
+    exactly with the crop record's width (A001_117..120: 2724.83, 4157.12,
+    5440.53, 6755.32 = 2724.83 x 9520 / 6240, / 4768, / 3840)."""
+
+    F_GEOM = 0xC0325140
+    XRES = {100: 2724.83, 153: 4157.12, 200: 5440.53, 248: 6755.32}
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM
+        except ImportError:
+            raise unittest.SkipTest('needs unicorn')
+        import os, pathlib, sys as _sys
+        here = pathlib.Path(__file__).resolve().parent
+        _sys.path.insert(0, str(here.parent / 'fp_usb_shell'))
+        from armasm import assemble, symbols
+        old = os.environ.get('FPSUP_CAMERA')
+        os.environ['FPSUP_CAMERA'] = 'fpl'
+        try:
+            src = here / 'gcsv_task.S'
+            cls.code, cls.sym = assemble(src), symbols(src)
+        finally:
+            if old is None:
+                del os.environ['FPSUP_CAMERA']
+            else:
+                os.environ['FPSUP_CAMERA'] = old
+        cls.Uc, cls.ARM = Uc, (UC_ARCH_ARM, UC_MODE_ARM)
+
+    def call(self, name, args, width, binning, record):
+        import struct
+        from unicorn import arm_const as A
+        uc = self.Uc(*self.ARM)
+        code_at, geom, stack, done = 0x10000, 0x60000, 0x80000, 0x90000
+        uc.mem_map(code_at, 0x10000); uc.mem_write(code_at, self.code)
+        uc.mem_map(geom, 0x1000); uc.mem_map(stack - 0x2000, 0x3000); uc.mem_map(done, 0x1000)
+        row = bytearray(0x64)
+        struct.pack_into('<I', row, 4, width); struct.pack_into('<I', row, 0x44, binning)
+        uc.mem_write(geom, bytes(row))
+        uc.mem_map(self.F_GEOM & ~0xFFF, 0x1000)       # F_GEOM(obj, mode) -> the row
+        uc.mem_write(self.F_GEOM, struct.pack('<3I', 0xE3000000 | ((geom & 0xF000) << 4) | (geom & 0xFFF),
+                                              0xE3400000 | (((geom >> 16) & 0xF000) << 4) | ((geom >> 16) & 0xFFF),
+                                              0xE12FFF1E))
+        uc.mem_map(FpLBlock.CROP_AT & ~0xFFF, 0x1000)
+        uc.mem_write(FpLBlock.CROP_AT, record)
+        for i, v in enumerate(args):
+            uc.reg_write(A.UC_ARM_REG_R0 + i, v)
+        uc.reg_write(A.UC_ARM_REG_SP, stack)
+        uc.reg_write(A.UC_ARM_REG_LR, done)
+        uc.emu_start(code_at + self.sym[name], done, count=100000)
+        return uc.reg_read(A.UC_ARM_REG_R0)
+
+    def test_the_crop_menu_sets_the_focal_and_the_crop_factor(self):
+        # mode 187: 8208 columns read, binning 1; 3856-wide frame, 28 mm
+        base = None
+        for key in (100, 153, 200, 248):
+            with self.subTest(crop=key):
+                rec = FpLBlock.crop_record(key)
+                crop = self.call('j_crop_milli', (187,), 8208, 1, rec)
+                focal = self.call('j_focal_milli', (187, 3856, 280), 8208, 1, rec) / 1000
+                cols = 8208 if key == 100 else FpLBlock.CROPS[key][0]
+                self.assertEqual(crop, 9520 * 1000 // cols)
+                self.assertAlmostEqual(focal, 3856 * 28 / (35.8 * cols / 9520), delta=0.002)
+                if key == 100:
+                    base = focal
+                else:
+                    # against the camera: the DNG's focal-plane resolution, relative
+                    # to the 1.0x take (whose frame the camera treats as 9520 wide)
+                    want = self.XRES[key] / self.XRES[100]
+                    got = focal / (base * 8208 / 9520)
+                    self.assertAlmostEqual(got, want, delta=5e-4)
+
+    def test_no_crop_record_keeps_the_mode(self):
+        import struct
+        for bad in (bytes(24), struct.pack('<4Id', 153, 7, 6240, 4144, 14.08),
+                    struct.pack('<4Id', 153, 100, 12000, 4144, 14.08)):
+            self.assertEqual(self.call('j_crop_milli', (187,), 8208, 1, bad), 9520 * 1000 // 8208)

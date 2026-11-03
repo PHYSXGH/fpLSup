@@ -75,7 +75,13 @@ SENSOR = {
             # s = (f64 at dist_halfdiag_at) / (f64 at dist_ref_at) = 21.4908 / 21.63
             # = 0.99356411, both doubles in the fp L image (the lens module divides
             # the same two at 0xC0044374).  Read at run time, not copied here.
-            'dist_halfdiag_at': 0xC02D7D08, 'dist_ref_at': 0xC0044528},
+            'dist_halfdiag_at': 0xC02D7D08, 'dist_ref_at': 0xC0044528,
+            # The camera's current crop (video crop menu 1.0x .. 3.18x), as the lens
+            # module reads it: u32 crop x100, u32 100, u32 width, u32 height (pixels
+            # of the 9520 x 6328 still area), f64 half-diagonal in mm.  Object at
+            # 0xC308A670 (FUN_c00530f0) +0x4268 (vt+0x3C) +0xC (vt+0x18) +0x17C.
+            # Read live 2026-11-03: 2.48x / 1.00x / 1.53x followed the menu.
+            'crop_record_at': 0xC308EA60},
 }
 
 
@@ -117,6 +123,8 @@ def asm_defines():
             # decimal, so the address table does not translate them again.
             out += (f'FPSUP_DIST_HALFDIAG_AT=0x{sen["dist_halfdiag_at"]:X}',
                     f'FPSUP_DIST_REF_AT=0x{sen["dist_ref_at"]:X}')
+        if 'crop_record_at' in sen:
+            out += (f'FPSUP_CROP_RECORD_AT=0x{sen["crop_record_at"]:X}',)
     return out
 
 LO, HI = 0xC0000000, 0xD0000000
