@@ -26,11 +26,12 @@ def asm_atan(u):
     return u * (1.0 + s * x2) * 4.0
 
 
-RHO = (0.55, 0.85, 1.00)
+RHO = (0.40, 0.70, 0.90, 1.00)
 
 
 def asm_fit(kr, s, normalise=True):
-    """pg_dist_fit: collocation at three radii, solved by Cramer's rule."""
+    """pg_dist_fit: collocation at four radii, Gaussian elimination with
+    partial pivoting in the order pg_solve4 does it."""
     k0 = kr[0] if normalise else 1.0
     m, b = [], []
     for rho in RHO:
@@ -38,22 +39,25 @@ def asm_fit(kr, s, normalise=True):
         r2 = rho * rho
         g = (kr[0] + kr[1] * r2 + kr[2] * r2 * r2 + kr[3] * r2 ** 3) / k0
         th = asm_atan(u)
-        m.append([th ** 3, th ** 5, th ** 7])
+        m.append([th ** 3, th ** 5, th ** 7, th ** 9])
         b.append(g * rho * s - th)
-
-    def det(a):
-        return (a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
-                - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
-                + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]))
-
-    d = det(m)
-    out = []
-    for c in range(3):
-        n = [row[:] for row in m]
-        for r in range(3):
-            n[r][c] = b[r]
-        out.append(det(n) / d)
-    return out
+    n = len(RHO)
+    for k in range(n):
+        p = max(range(k, n), key=lambda i: (abs(m[i][k]), -i))
+        m[k], m[p] = m[p], m[k]
+        b[k], b[p] = b[p], b[k]
+        for i in range(k + 1, n):
+            f = m[i][k] / m[k][k]
+            for c in range(k, n):
+                m[i][c] -= f * m[k][c]
+            b[i] -= f * b[k]
+    x = [0.0] * n
+    for i in reversed(range(n)):
+        acc = b[i]
+        for c in range(i + 1, n):
+            acc -= m[i][c] * x[c]
+        x[i] = acc / m[i][i]
+    return x
 
 
 def asm_interpolate(axis, nodes, a, plane=1):
@@ -106,7 +110,7 @@ class Fit(unittest.TestCase):
             r2 = rho * rho
             g = (kr[0] + kr[1] * r2 + kr[2] * r2 * r2 + kr[3] * r2 ** 3) / k0
             th = math.atan(rho * S)
-            model = th + sum(coeffs[i] * th ** (3 + 2 * i) for i in range(3))
+            model = th + sum(coeffs[i] * th ** (3 + 2 * i) for i in range(4))
             worst = max(worst, abs(model - g * rho * S) * FOCAL_PX)
         return worst
 
@@ -114,6 +118,13 @@ class Fit(unittest.TestCase):
         for i, kr in enumerate(GREEN):
             with self.subTest(node=i):
                 self.assertLess(self.residual(asm_fit(kr, S), kr), 0.1)
+
+    def test_four_coefficients_beat_three(self):
+        # The fourth was written as 0.0 until 2026-11-03; fitting it is what
+        # brought the fp L's 28-70 wide end from 0.70 px to 0.09.
+        for kr in GREEN:
+            four = self.residual(asm_fit(kr, S), kr)
+            self.assertLess(four, 0.02)
 
     def test_interpolation_reproduces_a_real_dng(self):
         """A001's WarpRectilinear is a point on this table, not a fit to it.
@@ -276,6 +287,15 @@ class FpLBlock(unittest.TestCase):
                      (0.9605918633191761, 0.023878677074874403, 0.015619418186754377, -0.0009345521543428238), 1e-6),
         'A001_109': ('45', 450, 3413, 0x7FFFFFFF,
                      (0.9706804594382561, 0.012193890249458588, 0.006104857692968177, 0.010153247621771807), 1e-6),       # F3.2
+        # dist2 card on the camera (2026-11-03), F5.6, focus at infinity, reported focal exact.
+        'A001_110': ('2870', 300, 5120, 0x7FFFFFFF,
+                     (0.9995356827362866, -0.10358844988042804, 0.04745078529227055, 0.014210509517448495), 1e-6),
+        'A001_111': ('2870', 280, 5120, 0x7FFFFFFF,
+                     (0.9995036716883677, -0.11709433747747322, 0.04886474862883644, 0.016547001432334743), 1e-6),
+        'A001_112': ('2870', 700, 5120, 0x7FFFFFFF,
+                     (0.95702733946746, 0.031839633276628705, 0.010881002164221141, -0.0005562992758673428), 1e-6),
+        'A001_113': ('2870', 420, 5120, 0x7FFFFFFF,
+                     (0.9800598984996695, -0.010911095117816644, 0.029359395770969722, 0.0005269313715978199), 1e-6),
     }
     DUMPS = {'45': 'lensram_0xC3079000_45mmF2.8DGDN_20261103.bin',
              '2870': 'lensram_0xC3079000-0xC3084000_28-70mm_at28_20261103.bin'}
@@ -370,3 +390,81 @@ class FpLBlock(unittest.TestCase):
         self.assertEqual(self.run_kr('45', 450, 3072, 335, empty)[0], 0)
         zeros = bytes(0x480 + 108 * 32)
         self.assertEqual(self.run_kr('45', 450, 3072, 335, zeros)[0], 0)
+
+
+class FitOnArm(unittest.TestCase):
+    """The assembled pg_dist_fit (four radii, pg_solve4), run under unicorn on
+    every fp L take's DNG coefficients and the LUMIX nodes: it must give what
+    the Python mirror gives, and the profile it makes must follow the DNG's own
+    warp to a tenth of a pixel over the whole frame."""
+
+    # take: (width, height, focal mm)
+    FRAMES = {'A001_100': (1936, 1090, 45), 'A001_101': (1936, 1090, 45)}
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM
+        except ImportError:
+            raise unittest.SkipTest('needs unicorn')
+        import pathlib, sys as _sys
+        here = pathlib.Path(__file__).resolve().parent
+        _sys.path.insert(0, str(here.parent / 'fp_usb_shell'))
+        from armasm import assemble, symbols
+        src = here / 'distfit_probe.S'
+        cls.code, cls.sym = assemble(src), symbols(src)
+        cls.Uc, cls.ARM = Uc, (UC_ARCH_ARM, UC_MODE_ARM)
+
+    def fit(self, kr, s):
+        import struct
+        from unicorn import arm_const as A
+        uc = self.Uc(*self.ARM)
+        uc.reg_write(A.UC_ARM_REG_C1_C0_2, uc.reg_read(A.UC_ARM_REG_C1_C0_2) | (0xF << 20))
+        uc.reg_write(A.UC_ARM_REG_FPEXC, 0x40000000)
+        code_at, data, stack, done = 0x10000, 0x70000, 0x80000, 0x90000
+        uc.mem_map(code_at, 0x10000); uc.mem_write(code_at, self.code)
+        uc.mem_map(data, 0x1000); uc.mem_map(stack - 0x2000, 0x3000); uc.mem_map(done, 0x1000)
+        uc.mem_write(data, struct.pack('<4d', *kr))
+        uc.reg_write(A.UC_ARM_REG_R0, data)
+        uc.reg_write(A.UC_ARM_REG_R1, data + 0x40)
+        uc.reg_write(A.UC_ARM_REG_R2, data + 0x80)
+        uc.reg_write(A.UC_ARM_REG_D7, struct.unpack('<Q', struct.pack('<d', s))[0])
+        uc.reg_write(A.UC_ARM_REG_SP, stack)
+        uc.reg_write(A.UC_ARM_REG_LR, done)
+        uc.emu_start(code_at + self.sym['pg_dist_fit'], done, count=100000)
+        return uc.reg_read(A.UC_ARM_REG_R0), struct.unpack('<4d', uc.mem_read(data + 0x40, 32))
+
+    @staticmethod
+    def frame_error(kr, k, w, h, focal_mm):
+        """Worst |Gyroflow model - DNG warp| in pixels, centre to corner."""
+        R = math.hypot(w, h) / 2
+        base = w * focal_mm / 35.8
+        fpx = base * kr[0]
+        worst = 0.0
+        for i in range(1, 201):
+            rho = i / 200
+            th = math.atan(rho * R / base)
+            rd = fpx * th * (1 + sum(k[j] * th ** (2 * j + 2) for j in range(4)))
+            worst = max(worst, abs(rd - rho * R * sum(kr[j] * rho ** (2 * j) for j in range(4))))
+        return worst
+
+    def test_matches_the_mirror_and_the_dng(self):
+        focal = {'A001_100': 45, 'A001_101': 45, 'A001_102': 45, 'A001_103': 45, 'A001_104': 28,
+                 'A001_105': 28, 'A001_106': 50, 'A001_107': 35, 'A001_108': 60, 'A001_109': 45,
+                 'A001_110': 30, 'A001_111': 28, 'A001_112': 70, 'A001_113': 42}
+        for take, row in FpLBlock.TAKES.items():
+            with self.subTest(take):
+                kr = row[4]
+                w, h = self.FRAMES.get(take, (3856, 2170, None))[:2]
+                s = math.hypot(w, h) / 2 / (w * focal[take] / 35.8)
+                ok, k = self.fit(kr, s)
+                self.assertEqual(ok, 1)
+                want = asm_fit(kr, s)
+                self.assertLess(max(abs(a - b) for a, b in zip(k, want)), 1e-9)
+                self.assertLess(self.frame_error(kr, k, w, h, focal[take]), 0.1)
+
+    def test_the_lumix_nodes_too(self):
+        for kr in GREEN:
+            ok, k = self.fit(kr, S)
+            self.assertEqual(ok, 1)
+            self.assertLess(max(abs(a - b) for a, b in zip(k, asm_fit(kr, S))), 1e-9)

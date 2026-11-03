@@ -420,3 +420,6 @@ Takes A001_107–109 with it: see `../LENS_TABLES.md`, "On the camera". The foca
 coefficients match its DNG; the zoom blend was wrong (log), now linear in mm:
 card `20261103-fast3-gyro-debug-noptp-dist2`, fpSup.BIN `cd4d1913…`, AutoRun.txt unchanged (`1bfd1c39…`).
 Copied to the card 2026-11-03 (replacing the log-blend fpSup.BIN `bf57d748…`); not yet booted.
+
+Card `20261103-fast3-gyro-debug-noptp-dist3`: dist2 plus the four-coefficient fit (`../LENS_TABLES.md`, "Four
+fitted coefficients"). fpSup.BIN `8f23935f…`, AutoRun.txt unchanged (`1bfd1c39…`). Copied to the card 2026-11-03.

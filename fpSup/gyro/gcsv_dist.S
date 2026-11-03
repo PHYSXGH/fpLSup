@@ -23,7 +23,7 @@
  *   pg_dist_focal   the focal the correction data was measured at, which is
  *                   not always the one on the barrel
  *   pg_dist_kr      the table, interpolated for where the lens is focused
- *   pg_dist_fit     three collocation radii to four Brown coefficients
+ *   pg_dist_fit     four collocation radii to four Brown coefficients
  *
  * kr0 is magnification rather than distortion -- the lens breathing, 1.2% on
  * the 40 mm between infinity and its near limit -- so it belongs on the focal
@@ -36,11 +36,11 @@
 .endm
 
 .equ DIST_WORK,      0x1100         /* past the lens name, inside the text
-                                     * buffer: 160 bytes of scratch that only
+                                     * buffer: 232 bytes of scratch that only
                                      * exists while the profile is built */
-.equ DIST_OK,        56             /* the flag distfit sets                  */
 .equ DIST_COEFFS,    32             /* the four it fitted                     */
-.equ DIST_SCRATCH,   64             /* 96 bytes it wants to work in           */
+.equ DIST_OK,        64             /* the flag distfit sets                  */
+.equ DIST_SCRATCH,   72             /* 160 bytes it wants to work in          */
 
 /* j9 -- r0 = 0..999999999, nine digits at the cursor, zero padded. */
 j9: push    {r4, r5, r6, lr}
@@ -169,9 +169,9 @@ j_dist_prepare:
      * distortion" (as the fp's v1.3 profiles did). */
 9:  pop     {r0, r1, r2, r3, r4, pc}
 
-/* j_dist_emit -- r4 = the text buffer.  The four numbers, comma separated.
- * Four and not fewer: Gyroflow falls back to its own telemetry path when the
- * list is short. */
+/* j_dist_emit -- r4 = the text buffer.  The four numbers, comma separated,
+ * all four fitted.  Four and not fewer: Gyroflow falls back to its own
+ * telemetry path when the list is short. */
 j_dist_emit:
     push    {r4, r5, r6, lr}
     add     r4, r4, #DIST_WORK
@@ -183,12 +183,12 @@ j_dist_emit:
 7:  add     r0, r4, r5, lsl #3
     vldr    d0, [r0]
     bl      jd
-    S ", "
     add     r5, r5, #1
-    cmp     r5, #3
-    blt     7b
-    S "0.0"
-    pop     {r4, r5, r6, lr}
+    cmp     r5, #4
+    bge     6f
+    S ", "
+    b       7b
+6:  pop     {r4, r5, r6, lr}
     bx      lr
 8:
     S "0.0, 0.0, 0.0, 0.0"

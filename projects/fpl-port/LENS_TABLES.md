@@ -223,3 +223,23 @@ In pixels at the 4K frame (whole radius range):
 
 The first column checks the camera's run: it computed the camera's own coefficients. The second is the
 limit of Gyroflow's three-coefficient fit (k4 written as 0): up to 0.7 px at the wide end of the 28-70.
+
+### Four fitted coefficients (2026-11-03)
+
+`pg_dist_fit` now fits k1..k4 by collocation at four radii (0.40, 0.70, 0.90, 1.00 of the corner) and
+solves the 4×4 system with Gaussian elimination (`pg_solve4`). It used to fit k1..k3 at 0.55 / 0.85 / 1.00
+and write k4 as 0.0. This is shared code, so the fp gets it too. Worst error over the whole frame against
+each take's own DNG warp (Python, chosen radii vs alternatives):
+
+| radii | worst over 14 takes | 28-70 at 28 mm |
+|---|---|---|
+| 3: 0.55 0.85 1 (old) | 0.70 px | 0.70 |
+| **4: 0.40 0.70 0.90 1** | **0.086 px** | 0.086 |
+| 4: 0.35 0.65 0.88 1 | 0.107 | 0.107 |
+| 4: 0.50 0.75 0.92 1 | 0.107 | 0.107 |
+| 4: 0.30 0.60 0.85 1 | 0.173 | 0.173 |
+
+`test_distfit.py FitOnArm` runs the assembled fit under unicorn on the 14 takes and the LUMIX nodes: the
+result matches the Python mirror to 1e-9 (1.7e-10 seen), and the profile is within 0.1 px of the DNG warp
+everywhere. Mutations (no back substitution, a moved radius) fail it. Removing the pivot choice does not:
+this matrix solves the same either way, though every fit does swap rows. Card `…-dist3`.

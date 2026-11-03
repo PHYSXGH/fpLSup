@@ -118,21 +118,22 @@ def main():
     print('pg_dist_fit returned', (P.mem_get(PARM + 28) or ['?'])[0])
 
     words = []
-    for off in range(0, 152, 64):
+    for off in range(0, 224, 64):
         w = P.mem_get(scratch + off, 16)
         if not w:
             raise SystemExit('could not read the result back')
         words += w
     raw = struct.pack(f'<{len(words)}I', *words)
     kr = struct.unpack_from('<4d', raw, 0)
-    fit = struct.unpack_from('<3d', raw, 32)
-    mat = struct.unpack_from('<9d', raw, 56)
-    rhs = struct.unpack_from('<3d', raw, 56 + 72)
+    fit = struct.unpack_from('<4d', raw, 32)
+    # pg_solve4 eliminates in place: this is the reduced matrix, not the one built
+    mat = struct.unpack_from('<16d', raw, 64)
+    rhs = struct.unpack_from('<4d', raw, 64 + 128)
     print('\nkr  from the camera:', ', '.join(f'{x:+.9f}' for x in kr))
     print('fit from the camera:', ', '.join(f'{x:+.9f}' for x in fit))
     print('matrix rows:')
-    for r in range(3):
-        print('   ' + ', '.join(f'{mat[3*r+c]:+.12e}' for c in range(3)))
+    for r in range(4):
+        print('   ' + ', '.join(f'{mat[4*r+c]:+.12e}' for c in range(4)))
     print('rhs:  ' + ', '.join(f'{x:+.12e}' for x in rhs))
 
     # Compare against the same arithmetic done here.  The assembly's own bugs
