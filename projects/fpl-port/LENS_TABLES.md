@@ -243,3 +243,27 @@ each take's own DNG warp (Python, chosen radii vs alternatives):
 result matches the Python mirror to 1e-9 (1.7e-10 seen), and the profile is within 0.1 px of the DNG warp
 everywhere. Mutations (no back substitution, a moved radius) fail it. Removing the pivot choice does not:
 this matrix solves the same either way, though every fit does swap rows. Card `…-dist3`.
+
+### dist3 on the camera, and a zoom sweep (2026-11-03)
+
+**A001_114 (28 mm) and A001_115 (30 mm), 4K, F5.6, MF ~0.33 m, card dist3.** Each .json has four fitted
+coefficients. They equal the fit of the model at the reported focal and a focus of **329 mm / 330 mm**
+**exactly (0.000 px)**; the DNGs record 331 mm all take long. So the camera computed the right thing from
+the focus it read at take start, 1–2 mm off the DNG's figure. At ~330 mm one millimetre of focus moves
+the 28 mm profile by ~0.07 px at the 4K corner, so the .json is 0.14 / 0.09 px off the DNG's warp, all of
+it from that focus reading. A001_116 (the sweep's .json, FHD, 28 mm): 0.07 px.
+
+**A001_116, zoom sweep 28 → 70 → 28, FHD, F5.6, MF, 237 frames.** The DNG's FocalLength and coefficients
+change every frame (145 distinct focals in tenths). The subject distance drifts 327–331 mm with zoom.
+Per frame, the search was over focal (0.01 mm steps, ±3 mm) and focus (0.1 mm steps):
+- 23 of 152 frames between zoom positions fit one (focal, focus) point exactly. Their focal against the
+  reported one: **+0.00 in 15, +0.10 in 6, −0.10 in 2**. The tenth goes both ways, so it is not a fixed
+  offset.
+- The other 129 fit no single point (residual 1e-6 … 2e-3, growing with zoom speed). That looks like the
+  camera mixing two lens states (zoom and focus read at different moments, or blended over time): a mix
+  of two states with different focus is not a point of the bilinear model.
+
+Reading: while the lens is still, the camera's correction uses the reported focal, or one tenth either
+side when the lens sits near a tenth's edge. During zooming it mixes states. The gyro profile is computed
+once at take start from the getters, so it carries at most that tenth (≤ ~1–2 px at the 4K corner on the
+wide end, usually less). No finer zoom value was found. Left as is.
