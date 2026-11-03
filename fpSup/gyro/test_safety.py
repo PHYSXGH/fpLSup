@@ -556,6 +556,20 @@ class ArenaTests(unittest.TestCase):
             'stage2 either, and cave.py refuses to allocate on one',
         'test_safety.py':
             'this file declares the bounds it checks against',
+        # Host-side models of the arena, not code that runs on the camera:
+        'card_status.py':
+            'lossless: ARENA/ARENA_END are the bounds it reads a card\'s state '
+            'back from',
+        'test_card_emulation.py':
+            'lossless: CAVE_BUMP/CAVE_ARENA/CAVE_END set up the emulated allocator',
+        'test_boot_card_v4.py':
+            'loader v4: MARK_AT/MARK_DATA are where the emulated boot puts the '
+            'loader\'s first block, and the test checks the bump moved past it',
+        'test_qs_layer.py':
+            'uishare: the emulated loader\'s starting bump and a fake veneer, '
+            'inside its own emulator',
+        'test_ui_apply.py':
+            'uishare: a fake cave address in an emulated refusal test',
     }
     SKIP_DIRS = ('/release/', '/history/', '/.git/', '/node_modules/')
 
