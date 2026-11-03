@@ -81,6 +81,39 @@ Between zoom positions the camera blends in some way not reproduced yet (not lin
 coefficients, or after a conversion). It is **sub-pixel**: ≤ 0.26 px at the corners of a 4K frame worst case
 (~0.06 px realistic). Good enough for Gyroflow; exactness open.
 
+## Run-time values: what the camera knows at the moment of a take (offline, 2026-11-03)
+
+From the `lens` shell commands (`src/shell/src/cmd/xc_shellCmdLens.cpp`); table entries (name, help, handler):
+
+| value | shell | getter fp | getter fp L |
+|---|---|---|---|
+| aperture, **APEX Av × 1024** (the firmware's own help: `setav (av=4096(AVx1024))`) | `lens getav` (handler fp L 0xC03F8408) | 0xC0362158 | **0xC0362370** (identical) |
+| focus position | `lens getfpos` (handler 0xC03F6A58) | 0xC035FD48 | 0xC035FF60 |
+| focus position → distance in mm | `lens cnvfdist` | 0xC035FE08 | 0xC0360020 |
+| current focal length (zoom), tenths of a mm | — (what the DNG's FocalLength uses: producer fp L 0xC0364AA0, ÷10) | 0xC03629D8 | **0xC0362BF0** (identical) |
+
+No `lens` command for the zoom position. The focal getter is a lens-object method (vtable +0xAC, fp L
+0xC0330DE8): for the mount types other than 5 it returns word +0x18 of `[lens object +0xC] + 4`. The lens
+object is at fp L 0xC343C5E0 (accessor 0xC032FEA8); live, that puts the current focal at **0xC347ED68**
+(heap; read through the pointers, not as a fixed address).
+
+**The lens singleton's +0x68 (the gyro's `O_LENS_FOCAL`) is not the current focal.** On the 28-70 it read
+280 at every zoom setting, and +0x6C read 700: they are the **wide and tele ends**. On a prime both are the
+one focal, which is why the fp code never noticed.
+
+### Live check (fp L, SIGMA 28-70mm F2.8 DG DN, 2026-11-03)
+
+| state | getav | getfpos | cnvfdist | singleton +0x68 | current focal (0xC347ED68) |
+|---|---|---|---|---|---|
+| start, F2.8, AF | 3072 (Av 3 = F2.8) | 3435 | 271 mm | 280 | — |
+| F5.6 | 5120 (Av 5 = F5.6) | 3532 | 264 mm | 280 | — |
+| MF, focused at infinity | 5120 | 0 | **2147483647** (0x7FFFFFFF) | 280 | — |
+| zoom 50 mm | 5120 | 0 | 2147483647 | 280 (wide end) | **500** = 50.0 mm |
+| zoom 70 mm | 5120 | 0 | 2147483647 | 280 (wide end; +0x6C = 700, tele end) | **700** = 70.0 mm |
+
+Mount type (`[0xC347D97C + 0x24]`) read 11, so the method took the path above. Infinity is 0x7FFFFFFF on the
+fp L; the fp's gyro code checks 0x07FFFFFF.
+
 ## Not known yet (needed before the camera can write distortion on the fp L)
 
 1. ~~Node count~~: derived from the data (see the 28-70 section). distfit.inc.S hard-codes 5.
@@ -100,5 +133,4 @@ coefficients, or after a conversion). It is **sub-pixel**: ≤ 0.26 px at the co
 7. **Zoom interpolation** between zoom positions: sub-pixel with linear-in-mm, not exact (A001_106).
 5. **The fp L's distfit**: it would need the node count, the block choice and the normalisation; the fp's
    version reads 5 nodes at fixed addresses.
-6. **The current aperture and focus at run time**, from the camera (the fp uses F_FOCUS_POS / F_FOCUS_DIST
-   for focus; an aperture getter is still to find).
+6. ~~The current aperture, focus and zoom at run time~~: found and confirmed live (section above).

@@ -208,3 +208,5 @@
 0xc0babdd8	0xc0bd2024	camera	the AutoRun path string the starter is called with; the hook path and the fallback ran on the camera (2026-11-02)
 0xc0420c20	0xc0420e38	auto	exact (AutoRun interpreter, used by test_loader_hook)
 0xc04db778	0xc04d79e0	checked	FUN_c04db778, the PTP receiver the NOPTP patch keeps usbTask from calling: identical function, exact match (2026-11-02)
+0xc0362158	0xc0362370	checked	aperture getter (APEX Av x 1024), what 'lens getav' calls (handler 0xC03F8408); identical function, exact match
+0xc03629d8	0xc0362bf0	checked	current focal length in tenths of a mm (what the DNG FocalLength producer calls); identical function, exact match; read 500 at 50 mm on the 28-70 (2026-11-03)
