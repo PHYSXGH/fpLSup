@@ -332,3 +332,9 @@ camera. The one inconsistency left is 1.00×: the profile uses mode 161's 9568 c
 9520, so the profile's focal at 1.05× / 1.00× is 9568 / 9024 = 1.0603 where the camera's is 1.0550.
 **Resolved the same day:** the fp L caps at 9520 again (`FOCAL_CAP.md`), so 1.00× → 1.05× is 9520 / 9024 =
 1.05496 like the camera. Test `FullFrameWidth`. Card `…-dist5`.
+
+### dist5 on the camera (2026-11-03)
+
+A001_124, 1.0×, 28 mm F5.6 ∞, 4K: focal 3014.368 px = 3856 × 28 / 35.8 × kr0 (0.999504) exactly; the step to
+the 1.05× clip (A001_121, 3180.052) is 1.05496, the camera's FocalPlaneXResolution ratio 2874.60 / 2724.83 to
+five places. Distortion: 0.084 px from the DNG's warp over the whole frame.
