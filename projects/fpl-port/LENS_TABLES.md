@@ -314,3 +314,19 @@ crop ratios in the DNGs come out exactly against 9520 (9520/6240 = 1.52564, the 
 ratio), not against 9568 or 9552. The camera's optics math treats the full-width video frame as the
 9520-column still image, i.e. it caps. The profile still leaves 1.00× uncapped (your choice, pending the
 test).
+
+### In-between crop steps (zoom step "normal"), card dist4, 2026-11-03
+
+All 24 records (1.00 … 3.18×) are menu steps; "skip" visits only some (1.53, 2.00, 2.48). Clips at 28 mm,
+F5.6, ∞, 4K 23.976:
+
+| clip | step | sensor mode | s: DNG vs record | DNG = block × record s | FocalPlaneXRes / 1.0× vs 9520 / width | .json vs DNG warp |
+|---|---|---|---|---|---|---|
+| A001_121 | 1.05× (9024) | **161** | 0.941880 = 0.941880 | 7.7e-15 | 1.05496 = 1.05496 | 0.050 px |
+| A001_122 | 1.17× (8128) | **161** | 0.848155 = 0.848155 | 6.4e-14 | 1.17126 = 1.17126 | 0.018 px |
+| A001_123 | 1.37× (6928) | **187** | 0.723188 = 0.723188 | 1.5e-13 | 1.37414 = 1.37413 | 0.004 px |
+
+The record rules every step, whichever sensor mode is underneath (1.17× is narrower than mode 187's 8208
+columns and still reads mode 161). The profile's crop factor, focal and distortion followed it on the
+camera. The one inconsistency left is 1.00×: the profile uses mode 161's 9568 columns (uncapped), the camera
+9520, so the profile's focal at 1.05× / 1.00× is 9568 / 9024 = 1.0603 where the camera's is 1.0550.
