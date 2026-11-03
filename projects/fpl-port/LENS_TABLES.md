@@ -203,3 +203,23 @@ Takes A001_107 (35), A001_108 (60), A001_109 (45mm), 4K 23.976, recorded with th
   is found.
 
 Rebuilt with the linear blend: card `20261103-fast3-gyro-debug-noptp-dist2`.
+
+### On the camera, card dist2 (linear blend), 2026-11-03
+
+Takes A001_110 (30 mm), A001_111 (28), A001_112 (70), A001_113 (42), 28-70 at F5.6, focus ∞, 4K. In each,
+the model at the **reported** focal reproduces the DNG's coefficients exactly (≤ 2e-18): 30.000 and 42.000
+between zoom positions, 28 and 70 held at 28.9 and 67.7. The +0.1 mm of A001_106/107 did not recur here.
+
+In pixels at the 4K frame (whole radius range):
+
+| take | .json vs the fit of its own DNG | .json model vs the DNG's warp |
+|---|---|---|
+| A001_110, 30 mm | 0.027 | 0.54 |
+| A001_111, 28 mm | 0.000 | 0.70 |
+| A001_112, 70 mm | 0.017 | 0.015 |
+| A001_113, 42 mm | 0.000 | 0.05 |
+| A001_109, 45mm (dist build) | 0.000 | 0.11 |
+| A001_107 / 108 (log-blend build) | 0.61 / 0.58 | 0.61 / 0.56 |
+
+The first column checks the camera's run: it computed the camera's own coefficients. The second is the
+limit of Gyroflow's three-coefficient fit (k4 written as 0): up to 0.7 px at the wide end of the 28-70.
