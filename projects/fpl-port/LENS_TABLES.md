@@ -27,15 +27,46 @@ Take A001_100 (FHD 23.976, same lens): the DNG's WarpRectilinear (3 planes) =
 coefficient rescaled for radius: **kr_j × s^(2j), s = 0.99356**. kr2 and kr3 then agree to ≤ 2×10⁻⁹ on every
 plane, the fp research's precision. Blocks 1 and 2 do not fit (≈10⁻³).
 
+## Three more takes (2026-11-03): focus × aperture
+
+`tools/match_dng_lens.py` against the same dump:
+
+| take | frame | aperture | fit | result |
+|---|---|---|---|---|
+| A001_100 | FHD 1936 × 1090 | F2.8 | block 0, nodes 6–7, t 0.62275 | exact (1.7e-16), s = 0.993564 |
+| A001_102 | 4K 3856 × 2170 | F2.8 | block 0, nodes 4–5, t 0.21442 | exact (1.3e-16), **s = 0.993564** |
+| A001_101 | FHD 1936 × 1090 | F4 | blocks 0–1, u 0.8655 × nodes 5–6, t 0.7513 | exact (4e-9) |
+| A001_103 | 4K 3856 × 2170 | F5.6 | blocks 1–2, u 0.455078 × nodes 8–9, t 0.496223, **s fitted free: 0.993564** | exact (5.6e-16) |
+
+- **s is a constant (0.993564)**: the same for FHD and 4K (different crops, 9552 vs 8208 columns). It is
+  not a frame-size normalisation. Its source is still to find (a constant of this lens or of the camera).
+- **The blocks are apertures**, interpolated linearly: the table is 2D, focus distance × aperture.
+- Block apertures, very likely: **3504, 4188, 6236** at focal+0x3CC (0xC307BDA0, three u32, nothing else
+  in the gap). F4 between blocks 0 and 1 at u 0.8655 → 3504 + 0.8655 × 684 = **4096.0**. That is F4 in two
+  readings: **F × 1024** (blocks F3.42 / F4.09 / F6.09) or **APEX Av × 1024** (≈F3.3 / F4.1 / F8.2). F2.8
+  takes are below block 0 and clamp to it in both. **A take at F5.6 separates them**: F×1024 predicts 5734,
+  Av×1024 predicts 5094.
+- Node count: each axis row holds 12 (0x30 bytes); this lens fills all 12. Likely rule: entries before
+  0x7FFFFFFF. To confirm with a lens with fewer nodes.
+
 ## Not known yet (needed before the camera can write distortion on the fp L)
 
 1. **Node count**: 12 here, 5 on the fp's lens. Where does the firmware keep it? (Look near the focal word
    at 0xC307B9D0 = 61189 / the 0xFFFF fill, or in DistConverter's code.) distfit.inc.S hard-codes 5.
-2. **What blocks 1–2 are**: aperture? another correction? Which block does the camera pick, and when?
-   (Repeat with another aperture and compare which block a DNG matches.)
-3. **The radius reference**: s = 0.99356 for a 1936 × 1090 FHD frame. Which radius is the table normalised
-   to? (The 16:9-vs-3:2 geometry gives 0.9547, so not simply the sensor's half-diagonal.) Check against
-   DISTCONVERTER_MATH.md and with a second frame size.
+2. ~~What blocks 1–2 are~~: apertures, **in APEX Av × 1024** (settled by A001_103: 4188 + 0.455078 × 2048 =
+   **5120.0 = Av 5.0** = F5.657, the true "F5.6"; F×1024 would be 5734; F4 gave 4096 = Av 4.0). The blocks are
+   Av 3.42 / 4.09 / 6.09 (≈ F3.3 / F4.1 / F8.2). F2.8 (Av 2.97) is below block 0 and clamps to it, which is
+   why both F2.8 takes matched block 0 exactly. The camera's correction for this lens is fully described:
+   interpolate focus along the axis, aperture (Av × 1024) between blocks with clamping, then kr_j × s^(2j).
+3. ~~The radius reference~~: a constant s = 0.993564, not frame geometry (above). **Lead:** s ≈ the still
+   image's half-diagonal in mm / the 36 × 24 mm half-diagonal (21.633 mm): 9520 × 6328 px at 3.76 µm gives
+   21.491 mm → 0.99341; s exactly needs a pitch of 3.76057 µm (2×10⁻⁵ off at 3.76). So the lens data are
+   likely normalised to the full-frame image circle and the camera rescales to its own sensor, the same for
+   every crop. A crop-dependent cap cannot remove s (identical for FHD and 4K). If confirmed, the code can
+   derive s from the sensor facts instead of hard-coding it. **A001_103 (4K F5.6) fitted s freely: 0.993564
+   again**, a constant across FHD/4K and three apertures.
 4. **Whether the addresses stay put with another lens** (also open on the fp).
 5. **The fp L's distfit**: it would need the node count, the block choice and the normalisation; the fp's
    version reads 5 nodes at fixed addresses.
+6. **The current aperture and focus at run time**, from the camera (the fp uses F_FOCUS_POS / F_FOCUS_DIST
+   for focus; an aperture getter is still to find).
