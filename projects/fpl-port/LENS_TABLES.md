@@ -134,10 +134,13 @@ fp L; the fp's gyro code checks 0x07FFFFFF.
    is **0.993564111**, the fitted s to every digit the fits give. **A001_103 (4K F5.6) fitted s freely: 0.993564
    again**, a constant across FHD/4K and three apertures.
 4. ~~Whether the addresses stay put with another lens~~: yes for the 28-70 (same F, same offsets).
-7. ~~Zoom interpolation~~: **log focal** fits best. On A001_106 one zoom weight v = 0.71643 reproduces all four
-   coefficients to 4e-7; with the focal the camera reports (500), log gives v 0.7157 → 1.2e-5, 1/f 1.98e-4,
-   linear in mm 2.26e-4. One take only: a second take between zoom positions (e.g. 35 mm) would confirm it.
-   The remaining 1.2e-5 would vanish at 50.006 mm, so the camera may know the zoom finer than tenths.
+7. **Zoom interpolation**: **linear in mm**, but with a focal **finer than the camera reports**. Three takes
+   between zoom positions, each fitted by one weight for all four coefficients:
+   A001_106 says 50.0 → v 0.71643 = (50.1 − 45.3)/6.7; A001_107 says 35.0 → v 0.63158 = (35.1 − 32.7)/3.8;
+   A001_108 says 60.0 → v 0.50955 = (60.0 − 52.0)/15.7 (exact, 1.5e-7). The log blend tried first fitted
+   A001_106 by chance and was wrong for 35 and 60 mm. **Still open: where the finer focal is** (the DNG
+   FocalLength getter returns 350 / 500). No firmware code addresses the block directly (it is reached
+   through a pointer); next is reading the lens state live at two zoom settings and diffing.
 5. ~~The fp L's distfit~~: written (2026-11-03), see below.
 6. ~~The current aperture, focus and zoom at run time~~: found and confirmed live (section above).
 
@@ -147,7 +150,7 @@ fp L; the fp's gyro code checks 0x07FFFFFF.
 sizes taken from the lens (Nz zoom positions, Na apertures, Nn nodes; the lists end at 0xFFFF / 0x7FFFFFFF /
 0xFFFFFFFF and the counts must divide exactly). It uses the run-time getters above: current focal, getav,
 getfpos → cnvfdist, where both 0x07FFFFFF and up and ≤ 0 mean infinity. It blends up to eight records: zoom
-in log focal, then each zoom row's own apertures, then each row's own focus axis, all held at the ends. Then
+linearly in mm, then each zoom row's own apertures, then each row's own focus axis, all held at the ends. Then
 kr_j × s^(2j) with s read from the two firmware doubles (`fwtarget.SENSOR['fpl']`, defines
 `FPSUP_DIST_HALFDIAG_AT` / `FPSUP_DIST_REF_AT`). The fp keeps its own 5-node routine.
 
@@ -156,8 +159,9 @@ the singleton's +0x68 only as the fallback. On a zoom that was the wide end. Thi
 for zooms on both cameras, and `pg_dist_focal`'s zoom branch (b1a98fad) now gets the real focal.
 
 `gyro/test_distfit.py FpLBlock` runs the assembled routine under unicorn against the fp L image and the two
-lens dumps (skipped without `private/`). The getters are stubbed with each take's DNG values: focal, getav
-nominal (3072 / 4096 / 5120) and the subject distance in mm.
+lens dumps (skipped without `private/`), with the getters stubbed to each take's values: getav nominal
+(3072 / 3413 / 4096 / 5120 for F2.8 / 3.2 / 4 / 5.6), subject distance in mm, and **the focal the camera
+blended with** (501 and 351 where the camera reports 500 and 350; see item 7).
 
 | take | lens | worst coefficient error |
 |---|---|---|
@@ -167,8 +171,21 @@ nominal (3072 / 4096 / 5120) and the subject distance in mm.
 | A001_103 | 45mm F5.6 4K | 4.8e-8 |
 | A001_104 | 28-70 at 28, F2.8 | 2.2e-8 |
 | A001_105 | 28-70 at 28, F5.6 | 1.4e-8 |
-| A001_106 | 28-70 at 50, F2.8 | 1.2e-5 |
+| A001_106 | 28-70 at "50" (50.1), F2.8 | 1.4e-7 |
+| A001_107 | 28-70 at "35" (35.1), F5.6, ∞ | 1.7e-7 |
+| A001_108 | 28-70 at 60, F5.6, ∞ | 1.5e-7 |
+| A001_109 | 45mm F3.2, ∞ | 0 |
 
-The 1e-8 level is the whole-mm subject distance (the DNG rounds it the way cnvfdist does). Mutations checked:
-dropping the s scaling fails all seven; dropping the log blend fails A001_106. Also tested: infinity in both
-spellings, and an empty or zeroed block is refused. Not yet run on the camera.
+### On the camera (card `20261103-fast3-gyro-debug-noptp-dist`, 2026-11-03)
+
+Takes A001_107 (35), A001_108 (60), A001_109 (45mm), 4K 23.976, recorded with the log-blend build:
+
+- focal_length in the .json: **35.000, 60.000, 45.000** (the old code wrote 28.0 for every zoom setting).
+- 45mm: the .json's three coefficients equal the fit to the take's own DNG to **7e-7**, so the camera ran the
+  routine and got the camera's coefficients.
+- Zooms: 5e-3 (35 mm) and 1.8e-2 (60 mm) off in Gyroflow's coefficients. That was the log blend, now
+  replaced. With linear-in-mm and the reported focal, 60 mm is exact; 35 mm stays off by 8e-4 in the lens
+  coefficients (≈ 1 px radially at the 4K corner, mostly in kr0, i.e. the focal scale) until the finer focal
+  is found.
+
+Rebuilt with the linear blend: card `20261103-fast3-gyro-debug-noptp-dist2`.

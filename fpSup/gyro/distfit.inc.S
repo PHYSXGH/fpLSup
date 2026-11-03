@@ -255,7 +255,7 @@ pg_dist_kr:
  * Where the lens is, from the camera at the moment of the call: the current
  * focal (the DNG FocalLength getter), the aperture (lens getav) and the focus
  * distance (getfpos -> cnvfdist; infinity is 0x7FFFFFFF here).  Zoom is
- * bracketed in the zoom list (in log focal, below), then in each of the two
+ * bracketed in the zoom list (linear in mm), then in each of the two
  * zoom rows the aperture
  * in that row's apertures, then in each of those rows the focus on that row's
  * own axis; each bracket is linear and held at its ends.  Eight records at
@@ -264,8 +264,10 @@ pg_dist_kr:
  * Then the radius: the camera's DNG carries kr_j x s^(2j) with s = 21.4908 /
  * 21.63 = 0.993564, two doubles of the firmware (fwtarget.SENSOR, defines
  * FPSUP_DIST_HALFDIAG_AT / FPSUP_DIST_REF_AT).  Run under unicorn against
- * seven DNGs (gyro/test_distfit.py FpLBlock): six to 1e-6 or better; the one
- * between zoom positions (A001_106, 50 mm) to 1.2e-5 with the log blend.
+ * ten DNGs (gyro/test_distfit.py FpLBlock), given the focal the camera
+ * blended with.  Between zoom positions that is finer than the getter
+ * reports (35.1 for 35.0): with the reported focal the 35 mm take is off by
+ * 8e-4 in the coefficients, about a pixel at the 4K corner.
  * ------------------------------------------------------------------------- */
 .equ F_FOCAL_NOW,   0xC03629D8      /* () -> current focal, tenths of a mm   */
 .equ F_APERTURE,    0xC0362158      /* () -> APEX Av x 1024 = lens getav     */
@@ -344,31 +346,12 @@ pg_dist_kr:
     vmov.f64 d0, d8
     bl      pg_bracket
     mov     r9, r0                      /* z */
-    vmov.f64 d11, d0                    /* v, linear in mm so far */
-    /* Between two zoom positions the camera blends in log focal: on A001_106
-     * (50.0 mm between 45.3 and 52.0) one weight fits all four coefficients
-     * to 4e-7 at v = 0.71643; log gives 0.7157 (1.2e-5), mm 0.7015 (2.3e-4). */
-    vcmp.f64 d11, #0.0
-    vmrs    APSR_nzcv, fpscr
-    ble     2f
-    vmov.f64 d1, #1.0
-    vcmp.f64 d11, d1
-    vmrs    APSR_nzcv, fpscr
-    bge     2f
-    ldr     r0, [r5, r9, lsl #2]
-    vmov    s0, r0
-    vcvt.f64.u32 d12, s0                /* f0 */
-    add     r1, r9, #1
-    ldr     r0, [r5, r1, lsl #2]
-    vmov    s0, r0
-    vcvt.f64.u32 d13, s0                /* f1 */
-    vdiv.f64 d0, d13, d12
-    bl      kr_ln
-    vmov.f64 d13, d0                    /* ln(f1 / f0) */
-    vdiv.f64 d0, d8, d12
-    bl      kr_ln                       /* ln(f / f0) */
-    vdiv.f64 d11, d0, d13               /* v */
-2:
+    vmov.f64 d11, d0                    /* v: linear in mm, as the camera does
+                                         * (A001_106/107/108: one weight fits
+                                         * all four coefficients at 50.1, 35.1,
+                                         * 60.0 mm).  The focal the camera blends
+                                         * with is finer than the getter's 0.1 mm
+                                         * steps say: 35.1 where it reports 35.0. */
     mov     r0, #0
     str     r0, [sp, #KR_DZ]
 20: ldr     r0, [sp, #KR_DZ]
@@ -518,28 +501,6 @@ kr_zero:    .double 0.0                 /* this routine's own: the file's pool *
 kr_half:    .double 0.5                 /* is out of vldr reach from here      */
 kr_onehalf: .double 1.5
 kr_2p24:    .double 16777216.0
-
-/* kr_ln -- d0 = x > 0 -> d0 = ln x, as 2 atanh((x - 1) / (x + 1)), 25 terms:
- * exact to a double for 1/3 < x < 3, and only ratios of neighbouring zoom
- * positions come here (the 28-70's widest gap is 1.3).  Clobbers d1-d4, ip. */
-kr_ln:
-    vmov.f64 d1, #1.0
-    vsub.f64 d2, d0, d1
-    vadd.f64 d3, d0, d1
-    vdiv.f64 d2, d2, d3                 /* y */
-    vmul.f64 d3, d2, d2                 /* y^2 */
-    vmov.f64 d0, d2                     /* the sum */
-    vmov.f64 d4, #1.0                   /* 2k + 1 */
-    mov     ip, #24
-1:  vmul.f64 d2, d2, d3
-    vmov.f64 d1, #2.0
-    vadd.f64 d4, d4, d1
-    vdiv.f64 d1, d2, d4
-    vadd.f64 d0, d0, d1
-    subs    ip, ip, #1
-    bne     1b
-    vadd.f64 d0, d0, d0
-    bx      lr
 
 /* pg_count -- r0 = u32 list, r1 = how many at most.  r0 = entries before the
  * first 0xFFFF / 0x7FFFFFFF / 0xFFFFFFFF.  Clobbers r1-r3, ip. */

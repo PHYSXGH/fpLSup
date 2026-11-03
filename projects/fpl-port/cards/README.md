@@ -415,3 +415,8 @@ Built with:
 Not on the camera yet. To check it, record a take, then compare its `.json` distortion and focal with the DNG.
 Use the 28-70 at a setting between zoom positions (e.g. 35 mm), which also tests the log zoom blend, and
 the 45mm.
+
+Takes A001_107–109 with it: see `../LENS_TABLES.md`, "On the camera". The focal is right for zooms and the 45mm
+coefficients match its DNG; the zoom blend was wrong (log), now linear in mm:
+card `20261103-fast3-gyro-debug-noptp-dist2`, fpSup.BIN `cd4d1913…`, AutoRun.txt unchanged (`1bfd1c39…`).
+Not copied to a card yet.
