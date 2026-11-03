@@ -18,6 +18,7 @@ from collections import Counter
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / 'fp_usb_shell'))
 from armasm import assemble, symbols
+import fwtarget
 
 SOURCE = HERE / 'gcsv_task.S'
 REPORT = (HERE.parent / 'projects/gyro-sup/validation'
@@ -26,7 +27,17 @@ BASELINE = HERE / 'testdata/gcsv-direct-before'
 POOL, CODE = 0x45000000, 0x45044000
 INPUT, JOB = 0x46000000, 0x46008000
 OUTPUT, STACK, STOP = 0x47000003, 0x10000000, 0x10100000
-FRAMEBUF, WRITE, TEXT_BYTES = 0xC3757A7C, 0xC03660E8, 0x22000
+TEXT_BYTES = 0x22000
+# The two firmware addresses the writer reaches: the frame-buffer pointer it
+# takes its pool from, and F_WRITE.  The code under test is built for the
+# camera FPSUP_CAMERA selects, so it uses that camera's; the snapshot in
+# testdata/gcsv-direct-before was built for the fp and keeps the fp's.
+FP_ADDRS = (0xC3757A7C, 0xC03660E8)
+ADDRS = (fwtarget.fw(FP_ADDRS[0]), fwtarget.fw(FP_ADDRS[1]))
+
+
+class FpBuild(bytes):
+    """Code assembled for the fp (the stored snapshot), whatever the target."""
 
 
 def unicorn_available():
@@ -100,14 +111,16 @@ class Formatter:
 
     def __init__(self, code, syms):
         self.code, self.syms = code, syms
+        self.framebuf, self.write = FP_ADDRS if isinstance(code, FpBuild) else ADDRS
         self.u = Uc(UC_ARCH_ARM, UC_MODE_ARM)
-        for address, size in ((POOL, 0x100000), (INPUT, 0x10000),
-                              (OUTPUT & ~0xFFF, 0x24000), (STACK, 0x10000),
-                              (STOP, 0x1000), (FRAMEBUF & ~0xFFF, 0x1000),
-                              (WRITE & ~0xFFF, 0x1000)):
+        pages = {POOL: 0x100000, INPUT: 0x10000, OUTPUT & ~0xFFF: 0x24000,
+                 STACK: 0x10000, STOP: 0x1000}
+        for address in (self.framebuf & ~0xFFF, self.write & ~0xFFF):
+            pages.setdefault(address, 0x1000)
+        for address, size in pages.items():
             self.u.mem_map(address, size)
         self.u.mem_write(CODE, code)
-        self.put32(FRAMEBUF, POOL)
+        self.put32(self.framebuf, POOL)
         self.writes = []
         self.returned = False
         self.call_sites = {
@@ -131,7 +144,7 @@ class Formatter:
             self.returned = True
             u.emu_stop()
             return
-        if address == WRITE:
+        if address == self.write:
             assert u.reg_read(UC_ARM_REG_SP) % 8 == 0, 'native call SP alignment'
             self.writes.append(bytes(u.mem_read(self.get(1), self.get(2))))
             lr = u.reg_read(UC_ARM_REG_LR)
@@ -279,7 +292,7 @@ class DirectOutputTests(unittest.TestCase):
 
     @staticmethod
     def baseline(edition='gcsv'):
-        return ((BASELINE / f'{edition}.bin').read_bytes(),
+        return (FpBuild((BASELINE / f'{edition}.bin').read_bytes()),
                 json.loads((BASELINE / f'{edition}-symbols.json').read_text()))
 
     def variants(self):
@@ -421,8 +434,11 @@ class DirectOutputTests(unittest.TestCase):
                 'accel_records': 40, 'before': before, 'after': after,
                 'output_bytes': len(results[0]), 'output_sha256': hashlib.sha256(results[0]).hexdigest(),
                 'saved_arm_instructions': saved})
-        REPORT.mkdir(parents=True, exist_ok=True)
-        (REPORT / 'instruction-counts.json').write_text(json.dumps(report, indent=2) + '\n')
+        # The recorded profile is the fp's; another camera's run checks the same
+        # things but does not overwrite it.
+        if fwtarget.target() == 'fp':
+            REPORT.mkdir(parents=True, exist_ok=True)
+            (REPORT / 'instruction-counts.json').write_text(json.dumps(report, indent=2) + '\n')
 
 
 if __name__ == '__main__':
