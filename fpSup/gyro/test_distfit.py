@@ -584,3 +584,24 @@ class CropProfile(unittest.TestCase):
         for bad in (bytes(24), struct.pack('<4Id', 153, 7, 6240, 4144, 14.08),
                     struct.pack('<4Id', 153, 100, 12000, 4144, 14.08)):
             self.assertEqual(self.call('j_crop_milli', (187,), 8208, 1, bad), 9520 * 1000 // 8208)
+
+
+class FullFrameWidth(CropProfile):
+    """1.00x on the fp L: the focal uses the 9520-column still width the camera's
+    own crop record gives, not what the mode reads (UHD 161: 9568, FHD 173:
+    3184 x 3 = 9552).  The camera's DNGs scale every crop step against 9520."""
+
+    def test_full_width_modes_use_the_still_width(self):
+        rec = FpLBlock.crop_record(100)
+        for mode, width, binning in ((161, 9568, 1), (173, 3184, 3)):
+            with self.subTest(mode=mode):
+                focal = self.call('j_focal_milli', (mode, 3856, 280), width, binning, rec) / 1000
+                self.assertAlmostEqual(focal, 3856 * 28 / 35.8, delta=0.002)
+                self.assertEqual(self.call('j_crop_milli', (mode,), width, binning, rec), 1000)
+
+    def test_one_step_in_matches_the_camera(self):
+        # 1.00x -> 1.05x: the DNGs' FocalPlaneXResolution goes 2724.83 -> 2874.60
+        full = self.call('j_focal_milli', (161, 3856, 280), 9568, 1, FpLBlock.crop_record(100))
+        rec = __import__('struct').pack('<4Id', 105, 100, 9024, 6000, 20.372866676400747)
+        step = self.call('j_focal_milli', (161, 3856, 280), 9568, 1, rec)
+        self.assertAlmostEqual(step / full, 2874.60 / 2724.83, delta=2e-4)

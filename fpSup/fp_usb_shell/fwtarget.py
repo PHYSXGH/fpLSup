@@ -65,12 +65,14 @@ RAM_BOTTOM = 0x40000000
 #   exact (23.9760, 29.9700, 59.9401 ...); the misfits are still/burst modes
 #   with truncated labels (projects/fpl-port/tools/imx455_modes.py).
 #   focal_uncapped: the focal length in pixels uses the columns the mode really
-#   reads (readout x binning), not that capped at the active width.  The fp
-#   keeps its cap; on the fp L it is off (user's choice, 2026-11-03) and
-#   untested -- see projects/fpl-port/FOCAL_CAP.md.
+#   reads (readout x binning), not that capped at the active width.  Off on both.
+#   The fp L had it on (2026-11-03, untested); switched off the same day to the
+#   camera's own convention: its crop records put 1.00x at the 9520-wide still
+#   area and every crop step's DNG scales against 9520 -- see
+#   projects/fpl-port/FOCAL_CAP.md and LENS_TABLES.md "Crop".
 SENSOR = {
     'fp':  {'name': 'IMX410', 'active_w': 6000, 'mm10': 359, 'mhz': 72, 'focal_uncapped': False},
-    'fpl': {'name': 'IMX455', 'active_w': 9520, 'mm10': 358, 'mhz': 72, 'focal_uncapped': True,
+    'fpl': {'name': 'IMX455', 'active_w': 9520, 'mm10': 358, 'mhz': 72, 'focal_uncapped': False,
             # The radius the camera rescales the lens data by (its DNG's kr_j x s^(2j)):
             # s = (f64 at dist_halfdiag_at) / (f64 at dist_ref_at) = 21.4908 / 21.63
             # = 0.99356411, both doubles in the fp L image (the lens module divides

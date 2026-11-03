@@ -427,3 +427,8 @@ fitted coefficients"). fpSup.BIN `8f23935f…`, AutoRun.txt unchanged (`1bfd1c39
 Card `20261103-fast3-gyro-debug-noptp-dist4`: dist3 plus the video crop menu (`../LENS_TABLES.md`, "Crop"):
 in a crop the profile's crop factor, focal and distortion follow the camera's crop record. fpSup.BIN
 `5a46dc40…`, AutoRun.txt unchanged (`1bfd1c39…`). fp builds byte-identical. Copied to the card 2026-11-03.
+
+Card `20261103-fast3-gyro-debug-noptp-dist5`: dist4 with the focal cap back on (1.00× = 9520 columns, the
+camera's convention; `../FOCAL_CAP.md`). At 1.00× the focal is 0.5% longer than dist4's (UHD: 9568 → 9520;
+FHD: 9552 → 9520); crops unchanged. fpSup.BIN `9e9fb33e…`, AutoRun.txt unchanged (`1bfd1c39…`). fp builds
+byte-identical. Not copied to a card yet.

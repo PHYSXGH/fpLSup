@@ -330,3 +330,5 @@ The record rules every step, whichever sensor mode is underneath (1.17× is narr
 columns and still reads mode 161). The profile's crop factor, focal and distortion followed it on the
 camera. The one inconsistency left is 1.00×: the profile uses mode 161's 9568 columns (uncapped), the camera
 9520, so the profile's focal at 1.05× / 1.00× is 9568 / 9024 = 1.0603 where the camera's is 1.0550.
+**Resolved the same day:** the fp L caps at 9520 again (`FOCAL_CAP.md`), so 1.00× → 1.05× is 9520 / 9024 =
+1.05496 like the camera. Test `FullFrameWidth`. Card `…-dist5`.

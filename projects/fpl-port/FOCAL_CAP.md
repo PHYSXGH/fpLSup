@@ -1,8 +1,12 @@
-# The focal-length cap: removed on the fp L, still to be tested
+# The focal-length cap on the fp L: back on, following the camera
 
-**Status (2026-11-03):** on the fp L, the lens profile's focal length in pixels uses the sensor columns a
-mode really reads. The cap the fp code applies is off for the fp L (`fwtarget.SENSOR['fpl']['focal_uncapped']`).
-**This has not been verified. Test it when convenient (below).**
+**Status (2026-11-03, later the same day):** the cap is **on** again for the fp L
+(`fwtarget.SENSOR['fpl']['focal_uncapped'] = False`): full-width modes count 9520 columns, the still image's
+width. Reason: the camera's own crop records put 1.00× at 9520 × 6328, and every crop step's DNG
+(1.05 … 2.48×) scales its FocalPlaneXResolution against 9520 exactly (`LENS_TABLES.md`, "Crop"). With the cap
+off, the profile's focal jumped by 9568 / 9024 = 1.060 from 1.00× to 1.05× where the camera's jumps by
+1.055. This is the camera's convention, not a measurement of the picture; the test below would still say
+what the frame really shows. The history follows.
 
 ## What the cap is
 
