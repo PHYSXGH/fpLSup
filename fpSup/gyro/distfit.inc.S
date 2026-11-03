@@ -58,6 +58,18 @@ pg_dist_focal:
     mov     r4, r0
     ldr_addr ip, DIST_FOCAL
     ldr     r0, [ip]
+    /* A zoom lens: the word is the first of a list of zoom positions, rising,
+     * and so only ever the wide end (SIGMA 28-70mm: 28.9, 32.7 ... 67.7 mm,
+     * read on the fp L 2026-11-03, projects/fpl-port/LENS_TABLES.md).  A prime
+     * has one entry and fill after it.  So a plausible, larger next word means
+     * a zoom, and the mount's focal is the better number for it. */
+    ldr     r1, [ip, #4]
+    cmp     r1, r0
+    bls     18f                         /* not rising: a prime                */
+    movw    r2, #20000
+    cmp     r1, r2
+    bls     19f                         /* a zoom: the mount's focal          */
+18:
     cmp     r0, #10                     /* nothing shorter than a millimetre */
     blo     19f
     movw    ip, #20000                  /* nor longer than two metres        */

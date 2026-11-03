@@ -179,3 +179,61 @@ class Source(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# --- pg_dist_focal, run for real -------------------------------------------
+class DistFocal(unittest.TestCase):
+    """The calibration focal is the first word of a list of zoom positions.  A
+    prime has one entry; a zoom has a rising list, and the first entry is only
+    the wide end (SIGMA 28-70mm on the fp L: 28.9, 32.7 ... 67.7 mm).  So a zoom
+    gets the mount's focal.  Runs the assembled routine under unicorn."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM
+        except ImportError:
+            raise unittest.SkipTest('needs unicorn')
+        import pathlib, sys as _sys
+        here = pathlib.Path(__file__).resolve().parent
+        _sys.path.insert(0, str(here.parent / 'fp_usb_shell'))
+        from armasm import assemble, symbols
+        from fwtarget import fw
+        src = here / 'distfit_probe.S'
+        cls.code, cls.sym = assemble(src), symbols(src)
+        cls.focal_at = fw(0xC307CDF0)
+        cls.Uc, cls.ARM = Uc, (UC_ARCH_ARM, UC_MODE_ARM)
+
+    def call(self, words, mount):
+        import struct
+        from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_LR, UC_ARM_REG_SP
+        uc = self.Uc(*self.ARM)
+        code_at, stack, done = 0x10000, 0x80000, 0x90000
+        uc.mem_map(code_at, 0x10000); uc.mem_write(code_at, self.code)
+        uc.mem_map(stack - 0x1000, 0x2000); uc.mem_map(done, 0x1000)
+        page = self.focal_at & ~0xFFF
+        uc.mem_map(page, 0x2000)
+        uc.mem_write(self.focal_at, struct.pack('<%dI' % len(words), *words))
+        uc.reg_write(UC_ARM_REG_R0, mount)
+        uc.reg_write(UC_ARM_REG_SP, stack)
+        uc.reg_write(UC_ARM_REG_LR, done)
+        uc.emu_start(code_at + self.sym['pg_dist_focal'], done, count=1000)
+        return uc.reg_read(UC_ARM_REG_R0)
+
+    def test_a_prime_gets_its_calibration_focal(self):
+        self.assertEqual(self.call([394, 0xFFFF], 400), 394)     # Art 40mm: 39.4 measured
+        self.assertEqual(self.call([450, 0xFFFF], 450), 450)     # 45mm F2.8 on the fp L
+
+    def test_a_prime_with_anything_but_a_rising_next_word_is_a_prime(self):
+        self.assertEqual(self.call([394, 0], 400), 394)
+        self.assertEqual(self.call([394, 394], 400), 394)
+        self.assertEqual(self.call([394, 0x7FFFFFFF], 400), 394)
+
+    def test_a_zoom_gets_the_mount_focal_not_the_wide_end(self):
+        zoom = [289, 327, 365, 386, 409, 430, 453, 520, 677, 0xFFFF]
+        self.assertEqual(self.call(zoom, 350), 350)              # 35 mm, not 28.9
+        self.assertEqual(self.call(zoom, 280), 280)              # even at the wide end
+
+    def test_implausible_calibration_still_falls_back(self):
+        self.assertEqual(self.call([0, 0xFFFF], 400), 400)
+        self.assertEqual(self.call([900, 0xFFFF], 400), 400)     # more than a quarter off
