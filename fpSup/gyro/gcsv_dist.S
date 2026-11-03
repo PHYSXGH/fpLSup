@@ -126,6 +126,7 @@ j_dist_prepare:
     add     r4, r4, #DIST_WORK
     mov     r0, #0
     str     r0, [r4, #DIST_OK]
+#ifndef FPGYRO_NO_LENS_DIST
     mov     r0, r4
     bl      pg_dist_kr
     cmp     r0, #0
@@ -162,6 +163,10 @@ j_dist_prepare:
     vadd.f64 d0, d0, d1
     vcvt.u32.f64 s0, d0
     vmov    r8, s0
+#endif
+    /* FPGYRO_NO_LENS_DIST: no distortion tables for this camera yet; DIST_OK
+     * stays 0 and the profile says 0.0 x4, which Gyroflow reads as "no
+     * distortion" (as the fp's v1.3 profiles did). */
 9:  pop     {r0, r1, r2, r3, r4, pc}
 
 /* j_dist_emit -- r4 = the text buffer.  The four numbers, comma separated.
@@ -190,4 +195,6 @@ j_dist_emit:
     pop     {r4, r5, r6, lr}
     bx      lr
 
+#ifndef FPGYRO_NO_LENS_DIST
 #include "distfit.inc.S"
+#endif

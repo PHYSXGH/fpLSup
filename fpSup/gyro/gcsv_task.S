@@ -768,7 +768,13 @@ writer_closefile:
  * rewrite them at NOTE_DROPS_AT without moving a byte. */
     .global gcsv_head1
 gcsv_head1:
+#ifdef FPSUP_CAMERA_FPL
+    /* The same length up to the six digits (NOTE_DROPS_AT): sigma_fpL_302 is as
+     * long as sigma_fp_v502. */
+    .asciz  "GYROFLOW IMU LOG\nversion,1.3\nid,sigma_fpL_302_internal_icm20321\norientation,xyz\nnote,fpGyroSup Base; dropped_blocks=000000\nfwversion,SIGMA fp L 3.02\nvideofilename,"
+#else
     .asciz  "GYROFLOW IMU LOG\nversion,1.3\nid,sigma_fp_v502_internal_icm20321\norientation,xyz\nnote,fpGyroSup Base; dropped_blocks=000000\nfwversion,SIGMA fp 5.02\nvideofilename,"
+#endif
     .balign 4
 
 /* tscale is the sample period and t is the sample number, so nothing rounds and

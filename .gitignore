@@ -56,3 +56,6 @@ firmware
 # unpacked firmware images (fp = out/, fp L = out_fpl/)
 out/
 out_fpl/
+
+# LibreOffice lock files (a CSV open in Calc)
+.~lock.*#

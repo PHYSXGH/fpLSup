@@ -349,3 +349,51 @@ replug.
   SA_RESTART; tested, it exits on SIGTERM.
 
 Use `--noptp` for fp L debug cards.
+
+## Lens profile .json on the fp L (started 2026-11-02)
+
+- IMX455 mode tables found in the fp L image by shape (`tools/find_mode_tables.py`): geometry 0xC0B91EE4,
+  timing 0xC0B91158, 73 modes. (The fp image holds the same IMX455 set too, at 0xC0B6BDC8 / 0xC0B6B03C.)
+  Extracted to `projects/fpl-port/imx455_modes.csv` (`tools/imx455_modes.py`).
+- The accessors F_TIMING / F_GEOM are identical on both cameras (rows 0x20 / 0x64, same lookup).
+  MODE_OBJ: fp L 0xC343C4C0 (the getter 0xC0329E08 builds it, same structure as fp FUN_c03255f8).
+- **Clock 72 MHz**: every IMX455 mode's stored fps fits (71/73; the two high-speed "240" modes are really
+  237.2/235.6, the same kind of rounded label as the IMX410's three misfits). The method returns 72 MHz for
+  the IMX410 too.
+- **Active width 9568 px** (widest readout; bin 2: 4784×2), **sensor width 36.0 mm** (9568 × 3.76 µm, the
+  IMX455 pitch). `fwtarget.SENSOR`, passed as FPSUP_SENSOR_* defines; gcsv_json.S uses them.
+- Distortion: **zero for now** (`FPGYRO_NO_LENS_DIST`): the fp L's lens correction tables are not located
+  yet. Gyroflow reads 0.0×4 as no distortion. The barrel focal is used instead of the calibration focal.
+- The profile and the gcsv header name the fp L (`FPSUP_CAMERA_FPL`). The gcsv id keeps its length
+  (sigma_fpL_302), so the drop digits stay at NOTE_DROPS_AT 116.
+- fp: base and gcsv debug cards byte-identical to HEAD. Tests: test_imu_stream (header test reads the fp
+  variant and checks the fp L one), test_boot_chain (fw(), passes on both cameras).
+
+| card | fpSup.BIN |
+|---|---|
+| `20261102-fast3-gyro-debug-noptp-json` (AutoRun.txt unchanged) | `3fa61eb0…` |
+
+Not yet on the camera: confirm MODE_OBJ points at those tables, then check a take's .json against the CSV.
+
+**Corrected 2026-11-03 (camera read):** MODE_OBJ 0xC343C4C0 → [obj] 0xC2F2E71C → timing **0xC0B90FF8**,
+geometry **0xC0B91A98**, **85 modes** (0x55). The shape scan started 11 rows late and found 73: it missed the
+still / burst modes, whose rows differ. Mode 0 (still) reads 9568 × 6380 and outputs **9520 × 6328**, the
+still image size. So, by the fp's convention (6064 read → 6000 out → 6000): **active width 9520**,
+**sensor width 35.8 mm** (9520 × 3.76 µm). Clock still **72 MHz**: every NTSC video rate is exact at 72 MHz;
+the 7 misfits are still / burst modes with truncated labels (9, 17, 57) and the two high-speed modes.
+`imx455_modes.csv` re-extracted with all 85 rows. Card rebuilt: fpSup.BIN `e83ac2e5…`.
+
+### First fp L lens profile from a take (2026-11-03)
+
+Card `20261102-fast3-gyro-debug-noptp-json` (fpSup.BIN `e83ac2e5…`), FHD 23.976, SIGMA 45mm F2.8 DG DN.
+`A001_100.json` beside `A001_100.GYR` (197,516 bytes), 222 DNGs. Mode 173 (readout 3184 × 1796, binning 3).
+Every sensor value equals the formula on the table row: readout 14.468 ms (580 × 1796 / 72 MHz), fps 23.976,
+crop 1.000, focal 2433.519 px (1936 × 45 / 35.8), distortion 0×4, camera "SIGMA fp L". The DNG: 1936 × 1090,
+default crop 1920 × 1080 at (8, 5), FocalPlaneXResolution 1362.42 px/in (nominal: 1920 crop = 9520 columns).
+
+Changes after it:
+- The focal length no longer caps the covered columns at 9520 on the fp L (user's choice; untested):
+  this take would give 2425.4 px instead of 2433.5. Crop keeps the cap. **See `../FOCAL_CAP.md`, including
+  how to test it.**
+- `identifier` now says `sigma_fpL_mode…` (it said `sigma_fp_mode…`).
+- Rebuilt: fpSup.BIN `52c95e5e…` (AutoRun.txt unchanged). fp base and gcsv byte-identical to HEAD.

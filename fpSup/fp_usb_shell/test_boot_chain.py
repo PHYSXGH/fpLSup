@@ -12,10 +12,11 @@ import tempfile
 import unittest
 
 from armasm import assemble, words
+from fwtarget import fw                                       # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
-LOADER_BASE = 0xC072DE64
-DCACHE, ICACHE = 0xC000E91C, 0xC000EABC
+LOADER_BASE = fw(0xC072DE64)
+DCACHE, ICACHE = fw(0xC000E91C), fw(0xC000EABC)
 DEFINES = [f'LOADER_BASE={LOADER_BASE}', 'POOL_DESC=0xC072F6D8',
            'BIN_PATH="\\\\fpSup.BIN"']
 
@@ -68,7 +69,7 @@ class BootChainTests(unittest.TestCase):
                     0xE2555004, 0x1AFFFFFB, 0xE8970030, 0xE12FFF34,
                     0xE12FFF35, 0xE1A00006, 0xE1A0D008, 0xE8BD41F0, 0xE12FFF10,
                     0xE3A00000, 0xE1A0D008, 0xE8BD81F0))
-                self.assertEqual(code[25:], (0xC3075264, 0x12345678,
+                self.assertEqual(code[25:], (fw(0xC3075264), 0x12345678,
                                              LOADER_BASE, DCACHE, ICACHE))
                 # Magic mismatch skips copy/cache/tail and returns zero via pc.
                 self.assertEqual(branch_target(code[7], 7 * 4), 22 * 4)

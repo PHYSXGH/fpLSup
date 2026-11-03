@@ -662,7 +662,11 @@ class Editions(unittest.TestCase):
         digits at NOTE_DROPS_AT so the close can rewrite them without moving a
         byte after them."""
         src = (HERE / 'gcsv_task.S').read_text()
-        h1 = src[src.index('gcsv_head1:'):].split('"')[1]
+        # The fp's header: the #else branch (the fp L's is the same length up to
+        # the digits, with its own id and fwversion; checked below too).
+        head = src[src.index('gcsv_head1:'):]
+        fpl_h1 = head.split('"')[1] if '#ifdef FPSUP_CAMERA_FPL' in head[:80] else None
+        h1 = head[head.index('#else'):].split('"')[1] if fpl_h1 else head.split('"')[1]
         h2 = src[src.index('gcsv_head2:'):].split('"')[1]
         h1 = h1.encode().decode('unicode_escape')
         h2 = h2.encode().decode('unicode_escape')
@@ -672,6 +676,10 @@ class Editions(unittest.TestCase):
         at = int(re.search(r'^\.equ NOTE_DROPS_AT,\s*(\d+)', inc, re.M).group(1))
         self.assertEqual(whole[at:at + 6], '000000')
         self.assertEqual(whole[at - 15:at], 'dropped_blocks=')
+        if fpl_h1:
+            fpl = fpl_h1.encode().decode('unicode_escape') + 'A001_002' + h2
+            self.assertEqual(fpl[at:at + 6], '000000', 'the fp L header moved the digits')
+            self.assertEqual(fpl[at - 15:at], 'dropped_blocks=')
 
 
 class BlockComments(unittest.TestCase):

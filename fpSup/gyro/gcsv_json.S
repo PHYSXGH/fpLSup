@@ -46,9 +46,16 @@
 .equ O_LENS_NAME,    0x24           /* blank padded, not NUL terminated       */
 .equ O_LENS_FOCAL,   0x68           /* tenths of a millimetre                 */
 .equ LENS_NAME_MAX,  32
+#ifdef FPSUP_SENSOR_ACTIVE_W
+/* Another sensor (fp_usb_shell/fwtarget.py SENSOR): the fp L's IMX455. */
+.equ SENSOR_HZ_MHZ,  FPSUP_SENSOR_MHZ
+.equ SENSOR_ACTIVE_W, FPSUP_SENSOR_ACTIVE_W
+.equ SENSOR_MM10,    FPSUP_SENSOR_MM10
+#else
 .equ SENSOR_HZ_MHZ,  72
 .equ SENSOR_ACTIVE_W, 6000
 .equ SENSOR_MM10,    359            /* 35.9 mm across the active area         */
+#endif
 .equ JSON_FOBJ_OFF,  0x800          /* inside the file object's reserved page */
 
 /* S "text" -- emit a constant.  The text rides after the call and js walks it
@@ -242,6 +249,23 @@ j_covered:
     pop     {r4, lr}                    @ still images only the active area
     bx      lr
 
+#ifdef FPSUP_SENSOR_FOCAL_UNCAPPED
+/* j_covered_raw -- r0 = mode -> the sensor columns the mode reads, uncapped.
+ * For the focal length only: a binned mode that reads a little past the still
+ * image's width (fp L FHD: 3184 x 3 = 9552 > 9520) is assumed to scale all of
+ * it into the frame.  Not verified on the fp L: projects/fpl-port/FOCAL_CAP.md. */
+j_covered_raw:
+    push    {r4, lr}
+    bl      j_geom
+    ldr     r1, [r0, #4]                @ readout width
+    ldr     r2, [r0, #0x44]             @ horizontal binning
+    cmp     r2, #0
+    moveq   r2, #1
+    mul     r0, r1, r2
+    pop     {r4, lr}
+    bx      lr
+#endif
+
 /* j_readout_us -- r0 = mode -> the rolling shutter, microseconds. */
 j_readout_us:
     push    {r4, r5, r6, lr}
@@ -300,8 +324,8 @@ j_crop_milli:
     movweq  r0, #1000
     beq     9f
     mov     r1, r0
-    movw    r0, #:lower16:6000000
-    movt    r0, #:upper16:6000000       @ SENSOR_ACTIVE_W * 1000
+    movw    r0, #:lower16:(SENSOR_ACTIVE_W * 1000)
+    movt    r0, #:upper16:(SENSOR_ACTIVE_W * 1000)
     bl      udiv32
 9:  pop     {r4, lr}
     bx      lr
@@ -316,14 +340,18 @@ j_focal_milli:
     push    {r4, r5, r6, r7, r8, lr}
     mov     r5, r1
     mov     r6, r2
+#ifdef FPSUP_SENSOR_FOCAL_UNCAPPED
+    bl      j_covered_raw
+#else
     bl      j_covered
+#endif
     cmp     r0, #0
     beq     9f
     mov     r7, #SENSOR_MM10
     mul     r7, r7, r0                  @ the divisor: 359 * covered
     umull   r0, r1, r5, r6              @ frame_w * focal_tenths
-    movw    r2, #:lower16:6000000
-    movt    r2, #:upper16:6000000
+    movw    r2, #:lower16:(SENSOR_ACTIVE_W * 1000)
+    movt    r2, #:upper16:(SENSOR_ACTIVE_W * 1000)
     umull   r3, r4, r0, r2
     mla     r4, r1, r2, r4              @ (r4:r3) = that, times six million
     mov     r0, r3
@@ -547,10 +575,16 @@ gcsv_json_write:
      * barrel: a SIGMA 40mm Art says 40.0 and calibrates at 39.4, and the
      * camera matrix wants the second -- it is the scale that turns a gyro
      * angle into pixels, so an error there over-corrects every rotation. */
+#ifndef FPGYRO_NO_LENS_DIST
     bl      pg_dist_focal
+#endif                                  @ without the tables: the barrel's focal
     mov     r8, r0                      @ the focal length, tenths of a mm
 
+#ifdef FPSUP_CAMERA_FPL
+    S "{\n  \"name\": \"SIGMA fp L - "
+#else
     S "{\n  \"name\": \"SIGMA fp - "
+#endif
     mov     r0, r11
     bl      j_name
     S " - "
@@ -566,8 +600,13 @@ gcsv_json_write:
     S " (mode "
     mov     r0, r7
     bl      ji
+#ifdef FPSUP_CAMERA_FPL
+    S ")\",\n  \"calibrated_by\": \"SIGMA fp L, on the camera\",\n"
+    S "  \"camera_brand\": \"SIGMA\",\n  \"camera_model\": \"fp L\",\n  \"lens_model\": \""
+#else
     S ")\",\n  \"calibrated_by\": \"SIGMA fp, on the camera\",\n"
     S "  \"camera_brand\": \"SIGMA\",\n  \"camera_model\": \"fp\",\n  \"lens_model\": \""
+#endif
     mov     r0, r11
     bl      j_name
     S "\",\n  \"camera_setting\": \""
@@ -600,7 +639,11 @@ gcsv_json_write:
     S ", \"h\": "
     mov     r0, r6
     bl      ji
+#ifdef FPSUP_CAMERA_FPL
+    S "},\n  \"identifier\": \"sigma_fpL_mode"
+#else
     S "},\n  \"identifier\": \"sigma_fp_mode"
+#endif
     mov     r0, r7
     bl      ji
     S "_"

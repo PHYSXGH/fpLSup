@@ -54,6 +54,30 @@ MEMORY = {
 RAM_BOTTOM = 0x40000000
 
 
+# The sensor, for what the lens profile computes (gyro/gcsv_json.S).  Both read
+# the same row layouts through identical accessors; the tables differ.
+#   IMX410: 6000 px of image (the still mode reads 6064, outputs 6000), 35.9 mm.
+#   IMX455: the fp L's mode object points at timing 0xC0B90FF8 / geometry
+#   0xC0B91A98, 85 modes (read on the camera 2026-11-03).  The still mode reads
+#   9568 x 6380 and outputs 9520 x 6328, so 9520 by the fp's convention;
+#   9520 x 3.76 um (the IMX455's pitch) = 35.80 mm -> 358.
+#   Clock: 72 MHz for both: at 72 MHz every NTSC video rate in the table is
+#   exact (23.9760, 29.9700, 59.9401 ...); the misfits are still/burst modes
+#   with truncated labels (projects/fpl-port/tools/imx455_modes.py).
+#   focal_uncapped: the focal length in pixels uses the columns the mode really
+#   reads (readout x binning), not that capped at the active width.  The fp
+#   keeps its cap; on the fp L it is off (user's choice, 2026-11-03) and
+#   untested -- see projects/fpl-port/FOCAL_CAP.md.
+SENSOR = {
+    'fp':  {'name': 'IMX410', 'active_w': 6000, 'mm10': 359, 'mhz': 72, 'focal_uncapped': False},
+    'fpl': {'name': 'IMX455', 'active_w': 9520, 'mm10': 358, 'mhz': 72, 'focal_uncapped': True},
+}
+
+
+def sensor():
+    return SENSOR[target()]
+
+
 def memory():
     return MEMORY[target()]
 
@@ -74,9 +98,16 @@ def asm_defines():
     # as the reference card_check.py compares an fp L card against.
     if os.environ.get('FPSUP_REF_NO_ALIAS') == '1':
         mem = MEMORY['fpl']
-    if mem['uncached_alias']:
-        return ()
-    return ('FPSUP_NO_UNCACHED_ALIAS=1', f'FPSUP_RAM_TOP=0x{mem["ram_top"]:X}')
+    sen = SENSOR['fpl'] if os.environ.get('FPSUP_REF_NO_ALIAS') == '1' else sensor()
+    out = ()
+    if not mem['uncached_alias']:
+        out += ('FPSUP_NO_UNCACHED_ALIAS=1', f'FPSUP_RAM_TOP=0x{mem["ram_top"]:X}')
+    if sen is not SENSOR['fp']:
+        out += (f'FPSUP_SENSOR_ACTIVE_W={sen["active_w"]}', f'FPSUP_SENSOR_MM10={sen["mm10"]}',
+                f'FPSUP_SENSOR_MHZ={sen["mhz"]}', 'FPSUP_CAMERA_FPL=1')
+        if sen['focal_uncapped']:
+            out += ('FPSUP_SENSOR_FOCAL_UNCAPPED=1',)
+    return out
 
 LO, HI = 0xC0000000, 0xD0000000
 _HEX = re.compile(r'\b0[xX]([cC][0-9a-fA-F]{7})\b')

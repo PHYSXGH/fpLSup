@@ -192,7 +192,7 @@
 0xc33c5aa5	-	const	ring end marker 0x5AA5C33C byte-swapped, not an address
 0xc3438398	0xc34392d0	checked	PATH_MGR_SSD: fw site 0xC0309300 -> 0xC030D398 loads it
 0xc3438400	0xc3439338	camera	PATH_MGR_SD: read 2026-11-02, take counter +0x10 = 99 after take A001_098, +0x2C = 99
-0xc343b588	-	todo	auto: guess 0xc343c4c0 by ptr-base-0x1c?
+0xc343b588	0xc343c4c0	camera	MODE_OBJ: read on the camera 2026-11-03: [obj] -> 0xC2F2E71C -> timing 0xC0B90FF8, geometry 0xC0B91A98, 85 modes; current mode [obj+4] = 9
 0xc3498dfc	0xc3499c10	checked	LEVEL_OBJ: getter FUN_c0365128 (called by FUN_c00c9b48) -> 0xC0365340 loads it
 0xc3756904	0xc3757744	camera	SHELL_CTX: 15 fw refs agree; shell runs and output is captured (2026-11-02)
 0xc3757a7c	0xc37588bc	camera	gyro pool word: 0x4541AA00 published (2026-11-02)
