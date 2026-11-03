@@ -44,7 +44,8 @@
 .equ F_GEOM,         0xC0321028     /* (obj, mode) -> the geometry row        */
 .equ F_LENS_INFO,    0xC03341C8     /* -> the lens singleton, no bus traffic  */
 .equ O_LENS_NAME,    0x24           /* blank padded, not NUL terminated       */
-.equ O_LENS_FOCAL,   0x68           /* tenths of a millimetre                 */
+.equ O_LENS_FOCAL,   0x68           /* tenths of a mm: the wide end of a zoom */
+.equ F_FOCAL_NOW_J,  0xC03629D8     /* () -> current focal, tenths of a mm    */
 .equ LENS_NAME_MAX,  32
 #ifdef FPSUP_SENSOR_ACTIVE_W
 /* Another sensor (fp_usb_shell/fwtarget.py SENSOR): the fp L's IMX455. */
@@ -397,8 +398,21 @@ j_lens:
     mov     r2, #1
 3:  mov     r1, #0
     strb    r1, [r4, r2]
-    ldr     r0, [r5, #O_LENS_FOCAL]
-    pop     {r4, r5, r6, lr}
+    /* The focal the lens is at now: the getter the DNG's FocalLength uses.
+     * The singleton's +0x68 is the zoom's wide end (+0x6C the tele end), so a
+     * zoom read 28.0 there at every setting (SIGMA 28-70mm on the fp L,
+     * 2026-11-03: the getter read 500 at 50 mm, 700 at 70 mm).  On a prime
+     * both are the one focal.  The wide end stays as the fallback. */
+    movw    ip, #:lower16:F_FOCAL_NOW_J
+    movt    ip, #:upper16:F_FOCAL_NOW_J
+    blx     ip
+    cmp     r0, #10                     @ a millimetre ..
+    blo     4f
+    movw    r1, #20000                  @ .. to two metres
+    cmp     r0, r1
+    bls     5f
+4:  ldr     r0, [r5, #O_LENS_FOCAL]
+5:  pop     {r4, r5, r6, lr}
     bx      lr
 8:  mov     r1, #'-'
     strb    r1, [r4]

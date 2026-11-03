@@ -397,3 +397,21 @@ Changes after it:
   how to test it.**
 - `identifier` now says `sigma_fpL_mode…` (it said `sigma_fp_mode…`).
 - Rebuilt: fpSup.BIN `52c95e5e…` (AutoRun.txt unchanged). fp base and gcsv byte-identical to HEAD.
+
+### Lens distortion on the fp L (2026-11-03)
+
+Card `20261103-fast3-gyro-debug-noptp-dist`: the same build as `20261102-fast3-gyro-debug-noptp-json`
+(store-boot, loader-hook, four-box, mark 0xC072BAC0, noptp, debug), now with the lens distortion
+(`../LENS_TABLES.md`, "The fp L's distfit") and the current focal in the profile. AutoRun.txt is unchanged
+(`1bfd1c39…`), so only fpSup.BIN changes, which the Fast Start loader reads at boot.
+
+| card | AutoRun.txt | fpSup.BIN |
+|---|---|---|
+| `20261103-fast3-gyro-debug-noptp-dist` | `1bfd1c39…` (unchanged) | `bf57d748…` |
+
+Built with:
+`FPSUP_CAMERA=fpl python3 -B gyro/build_base_card.py --edition base --debug --store-boot --loader-hook --four-box-bar --loader-hook-mark 0xC072BAC0 --noptp --out OUT`
+
+Not on the camera yet. To check it, record a take, then compare its `.json` distortion and focal with the DNG.
+Use the 28-70 at a setting between zoom positions (e.g. 35 mm), which also tests the log zoom blend, and
+the 45mm.

@@ -177,9 +177,9 @@
 0xc3075230	0xc30751f0	checked	SETTINGS_PTR = singleton+0x5C: FUN_c0021C00 0xC30751D4 -> 0xC3075194, FUN_c0021C40 reads +0x5C in both; +0x5D5 field identical (54 ldrb / 3 strb pair up)
 0xc307523c	0xc30751fc	camera	XC_CommonSaveData: settings code identical but for relocations; save routine same checks; 2026-11-02 on the camera: +0x28..+0x200 empty, 118 marker words survived a power-switch cycle at their own offsets (only the +0x1C save time changed elsewhere), restored to zero and that survived a cycle too
 0xc3075264	0xc3075224	camera	STORE (Fast Start) = XC_CommonSaveData+0x28: the region persists across a power cycle (2026-11-02). Fast Start itself still refused until its loader hook is emulated and tested on the fp L
-0xc307cdf0	-	todo	auto: guess - by ram-unknown
-0xc307ce2c	-	todo	auto: guess - by ram-unknown
-0xc307d270	-	todo	auto: guess - by ram-unknown
+0xc307cdf0	0xc307b9d4	checked	lens correction block (zoom positions first); same layout, 0x141C lower; read on the camera with the 45mm and the 28-70 (projects/fpl-port/LENS_TABLES.md)
+0xc307ce2c	0xc307ba10	checked	lens block +0x3C, the focus axis rows (LENS_TABLES.md)
+0xc307d270	0xc307be54	checked	lens block +0x480, the coefficient records (LENS_TABLES.md)
 0xc31ac530	0xc31ab114	checked	MODE_OBJ (still/cine): FUN_c0057ae8 base 0xC31AC51C -> FUN_c0055120 base 0xC31AB100, same layout
 0xc31ac59c	-	todo	auto: guess 0xc31ab180 by ptr-between
 0xc31e3264	0xc31e1664	auto	ptr(47)

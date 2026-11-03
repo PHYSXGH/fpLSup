@@ -212,9 +212,9 @@ def launch(edition, no_lens_json=False, no_lens_dist=False):
     if no_lens_json:
         defines = tuple(defines) + ('FPGYRO_NO_LENS_JSON=1',)
     # The fp L: the profile's sensor numbers come from fwtarget.SENSOR (IMX455);
-    # the lens distortion tables are not located on it yet, so the profile says
-    # zero distortion.  gcsv_dist.S.
-    if camera.target() != 'fp' or no_lens_dist:
+    # its lens distortion is the full zoom x aperture x focus block
+    # (distfit.inc.S, FPSUP_CAMERA_FPL).  --no-lens-dist leaves it out.
+    if no_lens_dist:
         defines = tuple(defines) + ('FPGYRO_NO_LENS_DIST=1',)
     code = assemble(HERE / src, defines)
     code = R.patch_offsets(code, symbols(HERE / src, defines))
@@ -323,8 +323,8 @@ def main():
                     help='with --debug: passed to build_autorun.py (keeps the '
                          'firmware off the shell\'s OUT endpoint)')
     ap.add_argument('--no-lens-dist', action='store_true',
-                    help='write the lens profile with zero distortion (always so '
-                         'on the fp L for now); on the fp only for comparing builds')
+                    help='write the lens profile with zero distortion; for comparing '
+                         'builds')
     ap.add_argument('--no-lens-json', action='store_true',
                     help='leave the lens profile .json out (always so on a camera '
                          'other than the fp); on the fp only for comparing builds')
@@ -414,8 +414,10 @@ def main():
         readme = readme.replace(
             'SIGMA fp firmware Ver.5.02 only',
             f'{camera.NAMES[camera.target()]} only -- EXPERIMENTAL PORT.\n'
-            'The lens profile .json gives zero distortion: the lens correction\n'
-            'tables have not been located on this camera yet.', 1)
+            + ('The lens profile .json gives zero distortion (--no-lens-dist).'
+               if a.no_lens_dist else
+               'The lens profile .json carries the lens\'s own distortion (zoom,\n'
+               'aperture and focus), not yet checked against a take on this camera.'), 1)
     (out / 'README.txt').write_text(readme)
     vshl = out / 'fpSup.BIN'
     autorun = out / 'AutoRun.txt'

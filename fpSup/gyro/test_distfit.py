@@ -237,3 +237,128 @@ class DistFocal(unittest.TestCase):
     def test_implausible_calibration_still_falls_back(self):
         self.assertEqual(self.call([0, 0xFFFF], 400), 400)
         self.assertEqual(self.call([900, 0xFFFF], 400), 400)     # more than a quarter off
+
+
+class FpLBlock(unittest.TestCase):
+    """The fp L's pg_dist_kr: the whole zoom x aperture x focus block, run under
+    unicorn against the lens RAM read off the camera (projects/fpl-port/private,
+    not committed: skipped without it) and the fp L firmware image (out_fpl).
+
+    Ground truth is the camera's own: each take's DNG WarpRectilinear, green
+    plane, with the getters stubbed to what that take's DNG says the lens was
+    at -- the focal, the aperture as lens getav reports it (Av x 1024, nominal:
+    3072 at F2.8, 4096 at F4, 5120 at F5.6, read live 2026-11-03), and the
+    subject distance in whole mm, as cnvfdist returns it."""
+
+    BASE = 0xC3079000
+    # take: (dump, focal tenths, getav, distance mm, DNG green kr0..kr3, tolerance)
+    TAKES = {
+        'A001_100': ('45', 450, 3072, 335, (0.9811110509996737, 0.0039068183804138465,
+                                            0.006829558394645104, 0.007120277223101721), 1e-6),
+        'A001_101': ('45', 450, 4096, 365, (0.9804726345446761, 0.00402040910790646,
+                                            0.0070598567722403765, 0.00740214367295511), 1e-6),
+        'A001_102': ('45', 450, 3072, 484, (0.9784054697379949, 0.006053506558266951,
+                                            0.006405520398743328, 0.008217170402696343), 1e-6),
+        'A001_103': ('45', 450, 5120, 285, (0.9823003216078996, 0.0027734335272667963,
+                                            0.007046864544133104, 0.006691545841780084), 1e-6),
+        'A001_104': ('2870', 280, 3072, 503, (0.9997028893834613, -0.11867143627849874,
+                                              0.048232689231305186, 0.014270218078191543), 1e-6),
+        'A001_105': ('2870', 280, 5120, 460, (0.9996458623299749, -0.11859736530640948,
+                                              0.04791617081154487, 0.014147793201969567), 1e-6),
+        # Between zoom positions, blended in log focal: 1.2e-5 (linear in mm was 2.3e-4).
+        'A001_106': ('2870', 500, 3072, 538, (0.976251141081415, 0.002212851435192034,
+                                              0.021189330466194634, -0.0010448646424254927), 2e-5),
+    }
+    DUMPS = {'45': 'lensram_0xC3079000_45mmF2.8DGDN_20261103.bin',
+             '2870': 'lensram_0xC3079000-0xC3084000_28-70mm_at28_20261103.bin'}
+    STUBS = {'focal': 0xC0362BF0, 'av': 0xC0362370, 'fpos': 0xC035FF60, 'fdist': 0xC0360020}
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM
+        except ImportError:
+            raise unittest.SkipTest('needs unicorn')
+        import os, pathlib, sys as _sys
+        here = pathlib.Path(__file__).resolve().parent
+        root = here.parent.parent
+        cls.private = root / 'projects' / 'fpl-port' / 'private'
+        image = root / 'out_fpl' / 'MAIN_c0000000.bin'
+        if not image.exists() or not all((cls.private / d).exists() for d in cls.DUMPS.values()):
+            raise unittest.SkipTest('needs out_fpl/ and the fp L lens dumps')
+        cls.image = image.read_bytes()
+        _sys.path.insert(0, str(here.parent / 'fp_usb_shell'))
+        from armasm import assemble, symbols
+        old = os.environ.get('FPSUP_CAMERA')
+        os.environ['FPSUP_CAMERA'] = 'fpl'
+        try:
+            src = here / 'distfit_probe.S'
+            cls.code, cls.sym = assemble(src), symbols(src)
+        finally:
+            if old is None:
+                del os.environ['FPSUP_CAMERA']
+            else:
+                os.environ['FPSUP_CAMERA'] = old
+        cls.Uc, cls.ARM = Uc, (UC_ARCH_ARM, UC_MODE_ARM)
+
+    def run_kr(self, dump, focal, av, mm, block=None):
+        import struct
+        from unicorn import arm_const as A
+        uc = self.Uc(*self.ARM)
+        uc.reg_write(A.UC_ARM_REG_C1_C0_2, uc.reg_read(A.UC_ARM_REG_C1_C0_2) | (0xF << 20))
+        uc.reg_write(A.UC_ARM_REG_FPEXC, 0x40000000)
+        uc.mem_map(0xC0000000, (len(self.image) + 0xFFFF) & ~0xFFFF)
+        uc.mem_write(0xC0000000, self.image)
+        ram = bytearray((self.private / self.DUMPS[dump]).read_bytes())
+        if block is not None:
+            ram[0xC307B9D4 - self.BASE:0xC307B9D4 - self.BASE + len(block)] = block
+        uc.mem_map(self.BASE, (len(ram) + 0xFFF) & ~0xFFF)
+        uc.mem_write(self.BASE, bytes(ram))
+
+        def ret(at, value):                     # movw r0 / movt r0 / bx lr
+            v = value & 0xFFFFFFFF
+            lo, hi = v & 0xFFFF, v >> 16
+            words = (0xE3000000 | ((lo >> 12) << 16) | (lo & 0xFFF),
+                     0xE3400000 | ((hi >> 12) << 16) | (hi & 0xFFF), 0xE12FFF1E)
+            uc.mem_write(at, struct.pack('<3I', *words))
+        ret(self.STUBS['focal'], focal)
+        ret(self.STUBS['av'], av)
+        ret(self.STUBS['fpos'], 1234)
+        ret(self.STUBS['fdist'], mm)
+
+        code_at, stack, out, done = 0x10000, 0x80000, 0x70000, 0x90000
+        uc.mem_map(code_at, 0x10000); uc.mem_write(code_at, self.code)
+        uc.mem_map(out, 0x1000); uc.mem_map(stack - 0x2000, 0x3000); uc.mem_map(done, 0x1000)
+        uc.reg_write(A.UC_ARM_REG_R0, out)
+        uc.reg_write(A.UC_ARM_REG_SP, stack)
+        uc.reg_write(A.UC_ARM_REG_LR, done)
+        uc.emu_start(code_at + self.sym['pg_dist_kr'], done, count=200000)
+        return uc.reg_read(A.UC_ARM_REG_R0), struct.unpack('<4d', uc.mem_read(out, 32))
+
+    def test_every_take_reproduces_its_dng(self):
+        for take, (dump, focal, av, mm, want, tol) in self.TAKES.items():
+            with self.subTest(take):
+                ok, kr = self.run_kr(dump, focal, av, mm)
+                self.assertEqual(ok, 1)
+                worst = max(abs(a - b) for a, b in zip(kr, want))
+                self.assertLess(worst, tol, f'{take}: {kr} vs {want}')
+                print(f'  {take}: worst {worst:.1e}')
+
+    def test_s_is_the_firmwares_two_doubles(self):
+        import struct
+        h = struct.unpack_from('<d', self.image, 0xC02D7D08 - 0xC0000000)[0]
+        r = struct.unpack_from('<d', self.image, 0xC0044528 - 0xC0000000)[0]
+        self.assertAlmostEqual(h / r, 0.993564, places=6)
+
+    def test_infinity_reads_either_way(self):
+        a = self.run_kr('45', 450, 3072, 0x7FFFFFFF)
+        b = self.run_kr('45', 450, 3072, 0x07FFFFFF)
+        self.assertEqual(a, b)
+        self.assertEqual(a[0], 1)
+
+    def test_no_data_is_refused(self):
+        import struct
+        empty = struct.pack('<15I', *([0xFFFF] * 15))
+        self.assertEqual(self.run_kr('45', 450, 3072, 335, empty)[0], 0)
+        zeros = bytes(0x480 + 108 * 32)
+        self.assertEqual(self.run_kr('45', 450, 3072, 335, zeros)[0], 0)

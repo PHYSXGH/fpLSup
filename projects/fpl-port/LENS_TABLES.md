@@ -127,10 +127,48 @@ fp L; the fp's gyro code checks 0x07FFFFFF.
    21.491 mm → 0.99341; s exactly needs a pitch of 3.76057 µm (2×10⁻⁵ off at 3.76). So the lens data are
    likely normalised to the full-frame image circle and the camera rescales to its own sensor, the same for
    every crop. A crop-dependent cap cannot remove s (identical for FHD and 4K). If confirmed, the code can
-   derive s from the sensor facts instead of hard-coding it. **A001_103 (4K F5.6) fitted s freely: 0.993564
+   derive s from the sensor facts instead of hard-coding it. **Found (2026-11-03):** the fp L image holds
+   s's two halves as doubles: **21.49079172691411 at 0xC02D7D08** (one entry of a table of half-diagonals
+   from 0xC02D7CE8: 18.35, 19.33, 15.64, 17.40, 21.49, 14.08 … mm) and **21.63 at 0xC0044528** (also
+   0xC0042E24, 0xC0043F28). The lens module divides a stored half-diagonal by 21.63 (0xC0044374). The quotient
+   is **0.993564111**, the fitted s to every digit the fits give. **A001_103 (4K F5.6) fitted s freely: 0.993564
    again**, a constant across FHD/4K and three apertures.
 4. ~~Whether the addresses stay put with another lens~~: yes for the 28-70 (same F, same offsets).
-7. **Zoom interpolation** between zoom positions: sub-pixel with linear-in-mm, not exact (A001_106).
-5. **The fp L's distfit**: it would need the node count, the block choice and the normalisation; the fp's
-   version reads 5 nodes at fixed addresses.
+7. ~~Zoom interpolation~~: **log focal** fits best. On A001_106 one zoom weight v = 0.71643 reproduces all four
+   coefficients to 4e-7; with the focal the camera reports (500), log gives v 0.7157 → 1.2e-5, 1/f 1.98e-4,
+   linear in mm 2.26e-4. One take only: a second take between zoom positions (e.g. 35 mm) would confirm it.
+   The remaining 1.2e-5 would vanish at 50.006 mm, so the camera may know the zoom finer than tenths.
+5. ~~The fp L's distfit~~: written (2026-11-03), see below.
 6. ~~The current aperture, focus and zoom at run time~~: found and confirmed live (section above).
+
+## The fp L's distfit (2026-11-03)
+
+`fpSup/gyro/distfit.inc.S`, `#ifdef FPSUP_CAMERA_FPL`: a `pg_dist_kr` that reads the whole block, with the
+sizes taken from the lens (Nz zoom positions, Na apertures, Nn nodes; the lists end at 0xFFFF / 0x7FFFFFFF /
+0xFFFFFFFF and the counts must divide exactly). It uses the run-time getters above: current focal, getav,
+getfpos → cnvfdist, where both 0x07FFFFFF and up and ≤ 0 mean infinity. It blends up to eight records: zoom
+in log focal, then each zoom row's own apertures, then each row's own focus axis, all held at the ends. Then
+kr_j × s^(2j) with s read from the two firmware doubles (`fwtarget.SENSOR['fpl']`, defines
+`FPSUP_DIST_HALFDIAG_AT` / `FPSUP_DIST_REF_AT`). The fp keeps its own 5-node routine.
+
+The focal: `gcsv_json.S j_lens` now asks the current-focal getter (fp 0xC03629D8, fp L 0xC0362BF0) and keeps
+the singleton's +0x68 only as the fallback. On a zoom that was the wide end. This fixes the profile's focal
+for zooms on both cameras, and `pg_dist_focal`'s zoom branch (b1a98fad) now gets the real focal.
+
+`gyro/test_distfit.py FpLBlock` runs the assembled routine under unicorn against the fp L image and the two
+lens dumps (skipped without `private/`). The getters are stubbed with each take's DNG values: focal, getav
+nominal (3072 / 4096 / 5120) and the subject distance in mm.
+
+| take | lens | worst coefficient error |
+|---|---|---|
+| A001_100 | 45mm F2.8 | 4.0e-8 |
+| A001_101 | 45mm F4 | 4.2e-9 |
+| A001_102 | 45mm F2.8 4K | 6.4e-8 |
+| A001_103 | 45mm F5.6 4K | 4.8e-8 |
+| A001_104 | 28-70 at 28, F2.8 | 2.2e-8 |
+| A001_105 | 28-70 at 28, F5.6 | 1.4e-8 |
+| A001_106 | 28-70 at 50, F2.8 | 1.2e-5 |
+
+The 1e-8 level is the whole-mm subject distance (the DNG rounds it the way cnvfdist does). Mutations checked:
+dropping the s scaling fails all seven; dropping the log blend fails A001_106. Also tested: infinity in both
+spellings, and an empty or zeroed block is refused. Not yet run on the camera.

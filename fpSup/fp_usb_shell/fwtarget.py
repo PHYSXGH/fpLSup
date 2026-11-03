@@ -70,7 +70,12 @@ RAM_BOTTOM = 0x40000000
 #   untested -- see projects/fpl-port/FOCAL_CAP.md.
 SENSOR = {
     'fp':  {'name': 'IMX410', 'active_w': 6000, 'mm10': 359, 'mhz': 72, 'focal_uncapped': False},
-    'fpl': {'name': 'IMX455', 'active_w': 9520, 'mm10': 358, 'mhz': 72, 'focal_uncapped': True},
+    'fpl': {'name': 'IMX455', 'active_w': 9520, 'mm10': 358, 'mhz': 72, 'focal_uncapped': True,
+            # The radius the camera rescales the lens data by (its DNG's kr_j x s^(2j)):
+            # s = (f64 at dist_halfdiag_at) / (f64 at dist_ref_at) = 21.4908 / 21.63
+            # = 0.99356411, both doubles in the fp L image (the lens module divides
+            # the same two at 0xC0044374).  Read at run time, not copied here.
+            'dist_halfdiag_at': 0xC02D7D08, 'dist_ref_at': 0xC0044528},
 }
 
 
@@ -107,6 +112,11 @@ def asm_defines():
                 f'FPSUP_SENSOR_MHZ={sen["mhz"]}', 'FPSUP_CAMERA_FPL=1')
         if sen['focal_uncapped']:
             out += ('FPSUP_SENSOR_FOCAL_UNCAPPED=1',)
+        if 'dist_halfdiag_at' in sen:
+            # Firmware addresses of this camera already: armasm passes them in
+            # decimal, so the address table does not translate them again.
+            out += (f'FPSUP_DIST_HALFDIAG_AT=0x{sen["dist_halfdiag_at"]:X}',
+                    f'FPSUP_DIST_REF_AT=0x{sen["dist_ref_at"]:X}')
     return out
 
 LO, HI = 0xC0000000, 0xD0000000

@@ -62,7 +62,8 @@ pg_dist_focal:
      * and so only ever the wide end (SIGMA 28-70mm: 28.9, 32.7 ... 67.7 mm,
      * read on the fp L 2026-11-03, projects/fpl-port/LENS_TABLES.md).  A prime
      * has one entry and fill after it.  So a plausible, larger next word means
-     * a zoom, and the mount's focal is the better number for it. */
+     * a zoom, and the mount's focal -- the one the lens is at now, from the
+     * DNG's FocalLength getter (gcsv_json.S j_lens) -- is the number for it. */
     ldr     r1, [ip, #4]
     cmp     r1, r0
     bls     18f                         /* not rising: a prime                */
@@ -136,6 +137,7 @@ pg_at5: .double -0.09090909090909091
 pg_at6: .double  0.07692307692307693
 pg_at7: .double -0.06666666666666667
 
+#ifndef FPSUP_CAMERA_FPL
 /* ---------------------------------------------------------------------------
  * pg_dist_kr -- r0 = where to put four doubles.  Returns 1 if the mounted lens
  * has correction data, 0 if the table is empty or the focus cannot be read.
@@ -233,6 +235,395 @@ pg_dist_kr:
     pop     {r4, r5, r6, r7, r8, pc}
 19: mov     r0, #0
     pop     {r4, r5, r6, r7, r8, pc}
+
+#else   /* FPSUP_CAMERA_FPL */
+/* ---------------------------------------------------------------------------
+ * pg_dist_kr, fp L -- r0 = where to put four doubles.  Returns 1 if the
+ * mounted lens has correction data, 0 if not.
+ *
+ * The same block as the fp's, read in full (projects/fpl-port/LENS_TABLES.md):
+ *
+ *   F+0x000   zoom positions, u32 tenths of a mm, rising       -> Nz (<= 15)
+ *   F+0x03C   focus axis, Nz x Na rows of Nn u32, 2^24 / mm     -> Nn
+ *   F+0x3CC   apertures, Nz rows of Na u32, APEX Av x 1024      -> Na
+ *   F+0x480   records [zoom][aperture][node][plane], 4 f64 each
+ *
+ * Each list ends at 0xFFFF, 0x7FFFFFFF or 0xFFFFFFFF; the counts must divide
+ * exactly or the block is not used.  A prime is Nz = 1 (SIGMA 45mm F2.8: 1 x 3
+ * x 12), the SIGMA 28-70mm is 9 x 3 x 8.
+ *
+ * Where the lens is, from the camera at the moment of the call: the current
+ * focal (the DNG FocalLength getter), the aperture (lens getav) and the focus
+ * distance (getfpos -> cnvfdist; infinity is 0x7FFFFFFF here).  Zoom is
+ * bracketed in the zoom list (in log focal, below), then in each of the two
+ * zoom rows the aperture
+ * in that row's apertures, then in each of those rows the focus on that row's
+ * own axis; each bracket is linear and held at its ends.  Eight records at
+ * most, weighted, green plane.
+ *
+ * Then the radius: the camera's DNG carries kr_j x s^(2j) with s = 21.4908 /
+ * 21.63 = 0.993564, two doubles of the firmware (fwtarget.SENSOR, defines
+ * FPSUP_DIST_HALFDIAG_AT / FPSUP_DIST_REF_AT).  Run under unicorn against
+ * seven DNGs (gyro/test_distfit.py FpLBlock): six to 1e-6 or better; the one
+ * between zoom positions (A001_106, 50 mm) to 1.2e-5 with the log blend.
+ * ------------------------------------------------------------------------- */
+.equ F_FOCAL_NOW,   0xC03629D8      /* () -> current focal, tenths of a mm   */
+.equ F_APERTURE,    0xC0362158      /* () -> APEX Av x 1024 = lens getav     */
+.equ DIST_APS,      0x3CC           /* offsets in the block                  */
+.equ DIST_ROWS,     0x3C
+.equ DIST_RECS,     0x480
+.equ DIST_NZ_MAX,   15
+.equ DIST_NA_MAX,   45
+.equ DIST_AX_MAX,   228
+.equ KR_DZ, 0                       /* locals */
+.equ KR_DA, 4
+.equ KR_DN, 8
+.equ KR_ZZ, 12
+.equ KR_ROW, 16
+
+    .global pg_dist_kr
+pg_dist_kr:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    vpush   {d8, d9, d10, d11, d12, d13, d14, d15}
+    sub     sp, sp, #28                 /* 36 + 64 + 28: eight-byte aligned */
+    mov     r4, r0
+
+    ldr_addr ip, F_FOCAL_NOW
+    blx     ip
+    vmov    s0, r0
+    vcvt.f64.u32 d8, s0                 /* d8 = focal, tenths of a mm */
+    ldr_addr ip, F_APERTURE
+    blx     ip
+    vmov    s0, r0
+    vcvt.f64.s32 d9, s0                 /* d9 = Av x 1024 */
+    ldr_addr ip, F_FOCUS_POS
+    blx     ip
+    ldr_addr ip, F_FOCUS_DIST
+    blx     ip                          /* r0 = object distance in mm */
+    vldr    d10, kr_zero                /* d10 = axis value, 0 = infinity */
+    cmp     r0, #0
+    ble     1f
+    ldr_addr r1, DIST_INF               /* 0x07FFFFFF and up: 0x7FFFFFFF too */
+    cmp     r0, r1
+    bge     1f
+    vmov    s0, r0
+    vcvt.f64.s32 d0, s0
+    vldr    d1, kr_2p24
+    vdiv.f64 d10, d1, d0
+1:
+    ldr_addr r5, DIST_FOCAL             /* F, the block */
+    mov     r0, r5
+    mov     r1, #DIST_NZ_MAX
+    bl      pg_count
+    movs    r6, r0                      /* Nz */
+    beq     99f
+    add     r0, r5, #DIST_APS
+    mov     r1, #DIST_NA_MAX
+    bl      pg_count
+    mov     r1, r6
+    bl      pg_div_exact
+    movs    r7, r0                      /* Na */
+    beq     99f
+    add     r0, r5, #DIST_ROWS
+    mov     r1, #DIST_AX_MAX
+    bl      pg_count
+    mul     r1, r6, r7
+    bl      pg_div_exact
+    mov     r8, r0                      /* Nn */
+    cmp     r8, #2
+    blt     99f
+
+    vldr    d0, kr_zero
+    vstr    d0, [r4]
+    vstr    d0, [r4, #8]
+    vstr    d0, [r4, #16]
+    vstr    d0, [r4, #24]
+
+    mov     r0, r5                      /* zoom */
+    mov     r1, r6
+    vmov.f64 d0, d8
+    bl      pg_bracket
+    mov     r9, r0                      /* z */
+    vmov.f64 d11, d0                    /* v, linear in mm so far */
+    /* Between two zoom positions the camera blends in log focal: on A001_106
+     * (50.0 mm between 45.3 and 52.0) one weight fits all four coefficients
+     * to 4e-7 at v = 0.71643; log gives 0.7157 (1.2e-5), mm 0.7015 (2.3e-4). */
+    vcmp.f64 d11, #0.0
+    vmrs    APSR_nzcv, fpscr
+    ble     2f
+    vmov.f64 d1, #1.0
+    vcmp.f64 d11, d1
+    vmrs    APSR_nzcv, fpscr
+    bge     2f
+    ldr     r0, [r5, r9, lsl #2]
+    vmov    s0, r0
+    vcvt.f64.u32 d12, s0                /* f0 */
+    add     r1, r9, #1
+    ldr     r0, [r5, r1, lsl #2]
+    vmov    s0, r0
+    vcvt.f64.u32 d13, s0                /* f1 */
+    vdiv.f64 d0, d13, d12
+    bl      kr_ln
+    vmov.f64 d13, d0                    /* ln(f1 / f0) */
+    vdiv.f64 d0, d8, d12
+    bl      kr_ln                       /* ln(f / f0) */
+    vdiv.f64 d11, d0, d13               /* v */
+2:
+    mov     r0, #0
+    str     r0, [sp, #KR_DZ]
+20: ldr     r0, [sp, #KR_DZ]
+    cmp     r0, #2
+    bge     50f
+    vmov.f64 d14, d11                   /* wz = v for the upper row */
+    cmp     r0, #0
+    bne     21f
+    vmov.f64 d1, #1.0
+    vsub.f64 d14, d1, d11               /* 1 - v for the lower */
+21: vcmp.f64 d14, #0.0
+    vmrs    APSR_nzcv, fpscr
+    beq     49f
+    add     r1, r9, r0                  /* zz */
+    str     r1, [sp, #KR_ZZ]
+    mul     r2, r1, r7
+    add     r0, r5, #DIST_APS
+    add     r0, r0, r2, lsl #2          /* this zoom's apertures */
+    mov     r1, r7
+    vmov.f64 d0, d9
+    bl      pg_bracket
+    mov     r10, r0                     /* a */
+    vmov.f64 d12, d0                    /* u */
+    mov     r0, #0
+    str     r0, [sp, #KR_DA]
+30: ldr     r0, [sp, #KR_DA]
+    cmp     r0, #2
+    bge     49f
+    vmov.f64 d15, d12
+    cmp     r0, #0
+    bne     31f
+    vmov.f64 d1, #1.0
+    vsub.f64 d15, d1, d12
+31: vmul.f64 d15, d15, d14              /* wz wa */
+    vcmp.f64 d15, #0.0
+    vmrs    APSR_nzcv, fpscr
+    beq     48f
+    ldr     r1, [sp, #KR_ZZ]
+    mul     r2, r1, r7
+    add     r2, r2, r10
+    add     r2, r2, r0                  /* row = zz Na + a + da */
+    str     r2, [sp, #KR_ROW]
+    mul     r3, r2, r8
+    add     r0, r5, #DIST_ROWS
+    add     r0, r0, r3, lsl #2          /* this row's axis */
+    mov     r1, r8
+    vmov.f64 d0, d10
+    bl      pg_bracket
+    mov     r11, r0                     /* n */
+    vmov.f64 d13, d0                    /* t */
+    mov     r0, #0
+    str     r0, [sp, #KR_DN]
+40: ldr     r0, [sp, #KR_DN]
+    cmp     r0, #2
+    bge     48f
+    vmov.f64 d1, d13
+    cmp     r0, #0
+    bne     41f
+    vmov.f64 d2, #1.0
+    vsub.f64 d1, d2, d13
+41: vmul.f64 d1, d1, d15                /* the record's weight */
+    vcmp.f64 d1, #0.0
+    vmrs    APSR_nzcv, fpscr
+    beq     47f
+    ldr     r2, [sp, #KR_ROW]
+    mul     r3, r2, r8
+    add     r3, r3, r11
+    add     r3, r3, r0                  /* row Nn + n + dn */
+    add     r3, r3, r3, lsl #1
+    add     r3, r3, #DIST_PLANE
+    add     r1, r5, #DIST_RECS
+    add     r1, r1, r3, lsl #5          /* the record */
+    mov     r2, #0
+42: add     r3, r4, r2, lsl #3
+    vldr    d2, [r1]
+    vldr    d3, [r3]
+    vmla.f64 d3, d2, d1
+    vstr    d3, [r3]
+    add     r1, r1, #8
+    add     r2, r2, #1
+    cmp     r2, #4
+    blt     42b
+47: ldr     r0, [sp, #KR_DN]
+    add     r0, r0, #1
+    str     r0, [sp, #KR_DN]
+    b       40b
+48: ldr     r0, [sp, #KR_DA]
+    add     r0, r0, #1
+    str     r0, [sp, #KR_DA]
+    b       30b
+49: ldr     r0, [sp, #KR_DZ]
+    add     r0, r0, #1
+    str     r0, [sp, #KR_DZ]
+    b       20b
+50:
+    /* A lens with no data leaves the records zeroed; kr0 near one is the tell. */
+    vldr    d0, [r4]
+    vldr    d1, kr_half
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    ble     99f
+    vldr    d1, kr_onehalf
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    bge     99f
+
+    /* kr_j x s^(2j), s from the firmware's own two doubles */
+    ldr_addr r0, FPSUP_DIST_HALFDIAG_AT
+    ldr_addr r1, FPSUP_DIST_REF_AT
+    vldr    d0, [r0]
+    vldr    d1, [r1]
+    vcmp.f64 d1, #0.0
+    vmrs    APSR_nzcv, fpscr
+    beq     99f
+    vdiv.f64 d0, d0, d1                 /* s */
+    vldr    d1, pg_s_lo                 /* not these two doubles: no data */
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    ble     99f
+    vldr    d1, pg_s_hi
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    bge     99f
+    vmul.f64 d0, d0, d0                 /* s^2 */
+    vldr    d1, [r4, #8]
+    vmul.f64 d1, d1, d0
+    vstr    d1, [r4, #8]
+    vmul.f64 d2, d0, d0                 /* s^4 */
+    vldr    d1, [r4, #16]
+    vmul.f64 d1, d1, d2
+    vstr    d1, [r4, #16]
+    vmul.f64 d2, d2, d0                 /* s^6 */
+    vldr    d1, [r4, #24]
+    vmul.f64 d1, d1, d2
+    vstr    d1, [r4, #24]
+    mov     r0, #1
+    b       98f
+99: mov     r0, #0
+98: add     sp, sp, #28
+    vpop    {d8, d9, d10, d11, d12, d13, d14, d15}
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+
+    .align  3
+pg_s_lo: .double 0.8
+pg_s_hi: .double 1.25
+kr_zero:    .double 0.0                 /* this routine's own: the file's pool */
+kr_half:    .double 0.5                 /* is out of vldr reach from here      */
+kr_onehalf: .double 1.5
+kr_2p24:    .double 16777216.0
+
+/* kr_ln -- d0 = x > 0 -> d0 = ln x, as 2 atanh((x - 1) / (x + 1)), 25 terms:
+ * exact to a double for 1/3 < x < 3, and only ratios of neighbouring zoom
+ * positions come here (the 28-70's widest gap is 1.3).  Clobbers d1-d4, ip. */
+kr_ln:
+    vmov.f64 d1, #1.0
+    vsub.f64 d2, d0, d1
+    vadd.f64 d3, d0, d1
+    vdiv.f64 d2, d2, d3                 /* y */
+    vmul.f64 d3, d2, d2                 /* y^2 */
+    vmov.f64 d0, d2                     /* the sum */
+    vmov.f64 d4, #1.0                   /* 2k + 1 */
+    mov     ip, #24
+1:  vmul.f64 d2, d2, d3
+    vmov.f64 d1, #2.0
+    vadd.f64 d4, d4, d1
+    vdiv.f64 d1, d2, d4
+    vadd.f64 d0, d0, d1
+    subs    ip, ip, #1
+    bne     1b
+    vadd.f64 d0, d0, d0
+    bx      lr
+
+/* pg_count -- r0 = u32 list, r1 = how many at most.  r0 = entries before the
+ * first 0xFFFF / 0x7FFFFFFF / 0xFFFFFFFF.  Clobbers r1-r3, ip. */
+pg_count:
+    mov     r2, #0
+1:  cmp     r2, r1
+    bhs     2f
+    ldr     r3, [r0, r2, lsl #2]
+    movw    ip, #0xFFFF
+    cmp     r3, ip
+    beq     2f
+    cmn     r3, #1
+    beq     2f
+    mvn     ip, #0x80000000
+    cmp     r3, ip
+    beq     2f
+    add     r2, r2, #1
+    b       1b
+2:  mov     r0, r2
+    bx      lr
+
+/* pg_div_exact -- r0 / r1, or 0 unless r1 divides r0 exactly and r0 > 0.
+ * Clobbers r2. */
+pg_div_exact:
+    mov     r2, #0
+    cmp     r1, #0
+    beq     2f
+1:  cmp     r0, r1
+    blo     2f
+    sub     r0, r0, r1
+    add     r2, r2, #1
+    b       1b
+2:  cmp     r0, #0
+    movne   r2, #0
+    mov     r0, r2
+    bx      lr
+
+/* pg_bracket -- r0 = rising u32 list, r1 = entries (>= 1), d0 = the value.
+ * r0 = i, d0 = t in [0, 1]: the value lies t of the way from entry i to
+ * entry i + 1, held at the ends.  One entry, or a span that does not rise:
+ * i, t = 0.  Clobbers r1-r3, ip, d1, d2. */
+pg_bracket:
+    mov     r2, #0
+    sub     r1, r1, #1                  /* pairs: i <= entries - 2 */
+    cmp     r1, #0
+    ble     8f
+1:  add     r3, r2, #1
+    cmp     r3, r1
+    bge     2f
+    ldr     ip, [r0, r3, lsl #2]
+    vmov    s2, ip
+    vcvt.f64.u32 d1, s2
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    blt     2f
+    mov     r2, r3
+    b       1b
+2:  ldr     ip, [r0, r2, lsl #2]
+    vmov    s2, ip
+    vcvt.f64.u32 d1, s2
+    add     r3, r2, #1
+    ldr     ip, [r0, r3, lsl #2]
+    vmov    s4, ip
+    vcvt.f64.u32 d2, s4
+    vsub.f64 d2, d2, d1                 /* the span */
+    vcmp.f64 d2, #0.0
+    vmrs    APSR_nzcv, fpscr
+    ble     8f
+    vsub.f64 d0, d0, d1
+    vdiv.f64 d0, d0, d2
+    vldr    d1, kr_zero
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    vmovlt.f64 d0, d1
+    vmov.f64 d1, #1.0
+    vcmp.f64 d0, d1
+    vmrs    APSR_nzcv, fpscr
+    vmovgt.f64 d0, d1
+    mov     r0, r2
+    bx      lr
+8:  vldr    d0, kr_zero
+    mov     r0, r2
+    bx      lr
+#endif  /* FPSUP_CAMERA_FPL */
 
 /* ---------------------------------------------------------------------------
  * pg_dist_fit -- r0 = the four kr doubles, r1 = room for three results,
