@@ -140,7 +140,21 @@ fp L; the fp's gyro code checks 0x07FFFFFF.
    A001_108 says 60.0 → v 0.50955 = (60.0 − 52.0)/15.7 (exact, 1.5e-7). The log blend tried first fitted
    A001_106 by chance and was wrong for 35 and 60 mm. **Still open: where the finer focal is** (the DNG
    FocalLength getter returns 350 / 500). No firmware code addresses the block directly (it is reached
-   through a pointer); next is reading the lens state live at two zoom settings and diffing.
+   through a pointer).
+
+   Live search (2026-11-03, 28-70 at 28.2 then 35.0, read-only): snapshots of the lens module RAM
+   (0xC3079000..F), the lens object (0xC347ED00, 1 KB), the singleton and 0xC347D97C, diffed. Words that move
+   with zoom: obj +0x50 (3852 → 5413; 22913 at 50 mm), +0x70 (191 → 217; 299), +0x74 (108 → 97; 82), +0x78,
+   plus per-zoom tables at 0xC307A3B0..0xC307A568 (correction curves for the current zoom; no doubles).
+   None of them, against any 9-entry table in the lens RAM, gives the takes' weights, and no value between
+   35.01 and 35.09 (hundredths, thousandths, f32, f64) is there. The fitted focals are 35.100 ± 0.002,
+   50.100 and 60.000: exactly one tenth or none, which suggests two roundings of a finer value (the getter
+   truncating, the correction rounding) rather than noise. The block builders (fp L 0xC00508A8,
+   0xC0051628) fill the zoom list from u16 tenths in the lens data, so the list itself is not finer. The
+   reader is upstream of the OpcodeList3 writer (fp 0xC02CE918, which serialises finished doubles).
+
+   Cost: a 0.1 mm focal error is 1.1 px of shape at the 4K corner at 35 mm, 2.0 px at worst (29 mm, where
+   the distortion changes fastest), plus a focal scale of ≤ 6e-5.
 5. ~~The fp L's distfit~~: written (2026-11-03), see below.
 6. ~~The current aperture, focus and zoom at run time~~: found and confirmed live (section above).
 
