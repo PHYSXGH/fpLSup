@@ -431,4 +431,4 @@ in a crop the profile's crop factor, focal and distortion follow the camera's cr
 Card `20261103-fast3-gyro-debug-noptp-dist5`: dist4 with the focal cap back on (1.00× = 9520 columns, the
 camera's convention; `../FOCAL_CAP.md`). At 1.00× the focal is 0.5% longer than dist4's (UHD: 9568 → 9520;
 FHD: 9552 → 9520); crops unchanged. fpSup.BIN `9e9fb33e…`, AutoRun.txt unchanged (`1bfd1c39…`). fp builds
-byte-identical. Not copied to a card yet.
+byte-identical. Copied to the card 2026-11-03.
