@@ -21,9 +21,10 @@ import build_v4 as B
 import test_v3 as T3
 import test_v4 as T4
 
-STORE, WORDS = 0xC307544C, 28
+from fwtarget import fw                                       # noqa: E402  (the fp's, mapped per camera)
+STORE, WORDS = fw(0xC307544C), 28
 MAGIC, LMAGIC = 0x314C5750, 0x4C4C5750
-MGR, PMU, CBOBJ, CB_STOCK = 0xC30756C4, 0x2D000280, 0xC31D848C, 0xC0023B60
+MGR, PMU, CBOBJ, CB_STOCK = fw(0xC30756C4), 0x2D000280, fw(0xC31D848C), fw(0xC0023B60)
 L_PWRLOG = 21                                   # L_OLD_FORMAT (20) + 1
 SRC = None                                      # the mutation check swaps these
 ENTRY = None
@@ -78,7 +79,7 @@ class PwroffLogTests(unittest.TestCase):
     def test_boot_logs_and_reserves_a_cave_block(self):
         cam = boot()
         late = cam.w(self.poff(cam) + 20)
-        self.assertTrue(0xC072E064 <= late < 0xC072EFB4, hex(late))            # cave.py arena
+        self.assertTrue(fw(0xC072E064) <= late < fw(0xC072EFB4), hex(late))            # cave.py arena
         self.assertIn((L_PWRLOG, late), [(c, a) for c, a, _, _ in cam.loadlog()])
         self.assertEqual(cam.w(STORE), 0)                     # nothing written until a power-off
 

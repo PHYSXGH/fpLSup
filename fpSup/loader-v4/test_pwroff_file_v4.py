@@ -23,8 +23,9 @@ import test_v4 as T4
 
 PATH = '\\fpSup\\PWROFF.LOG'
 MAGIC, WORDS = 0x31465750, 32
-MGR, PMU, CBOBJ, CB_STOCK = 0xC30756C4, 0x2D000280, 0xC31D848C, 0xC0023B60
-BATT, BATT_OBJ, BUSY, NOW_MS = 0xC30783D8, 0xC3079000, 0xC3075748, 0xC301EAE4
+from fwtarget import fw                                       # noqa: E402  (the fp's, mapped per camera)
+MGR, PMU, CBOBJ, CB_STOCK = fw(0xC30756C4), 0x2D000280, fw(0xC31D848C), fw(0xC0023B60)
+BATT, BATT_OBJ, BUSY, NOW_MS = fw(0xC30783D8), 0xC3079000, fw(0xC3075748), fw(0xC301EAE4)
 L_PWRFILE = 0x31
 SRC = None                                      # the mutation check swaps these
 ENTRY = None

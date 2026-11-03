@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / 'research' / 'ui' / 'tools' / 'arm_text'))
 
 import cave
 import build_v3 as V3
+import fwtarget
 from armasm import assemble, symbols
 
 SL_DIR, SL_SELF = 'fpSup', 'LOADER.BIN'
@@ -48,12 +49,19 @@ UI_SITES = (('STOCK_GUI', 0xC056461C), ('STOCK_RES', 0xC05E5B58),   # fpsup_home
             ('STOCK_OWN', 0xC05E61C8), ('STOCK_REM', 0xC05E61E0))
 
 
+def firmware_image():
+    """The firmware image of the camera this build is for (out/ for the fp,
+    out_fpl/ for the fp L: projects/fpl-port/README.md)."""
+    t = fwtarget.target()
+    return (ROOT / ('out' if t == 'fp' else f'out_{t}') / 'MAIN_c0000000.bin').read_bytes()
+
+
 def ui_stock_defines():
     """The four sites' stock words, from the firmware image (fpsup_home.c STOCK_*)."""
-    img = (ROOT / 'out/MAIN_c0000000.bin').read_bytes()
+    img = firmware_image()
     out = []
     for name, a in UI_SITES:
-        w = struct.unpack_from('<I', img, a - 0xC0000000)[0]
+        w = struct.unpack_from('<I', img, fwtarget.fw(a) - 0xC0000000)[0]
         out.append(f'-D{name}=0x{w:08X}u')
     if out[0] != '-DSTOCK_GUI=0xEB000005u':
         raise BuildError('0xC056461C is not the stock bl FUN_c0564638')
@@ -67,8 +75,22 @@ def compile_unit(tmp, src, entry, extra=(), ui=False):
         extra = [*extra, '-DFPSUP_UI=1', *ui_stock_defines()]
     obj = tmp / (src.stem + '.o')
     clang = shutil.which('clang') or 'clang'
-    r = subprocess.run([clang, *CFLAGS, *V3.cdefs(), *extra, '-c', '-I', str(HERE), '-I', str(FPSUP_UI),
-                        str(src), '-o', str(obj)], capture_output=True, text=True)
+    defs = [*V3.cdefs(), *extra]
+    inc = ['-I', str(HERE), '-I', str(FPSUP_UI)]
+    if fwtarget.CAMERAS[fwtarget.target()] is None:
+        r = subprocess.run([clang, *CFLAGS, *defs, '-c', *inc, str(src), '-o', str(obj)],
+                           capture_output=True, text=True)
+    else:
+        # Another camera: preprocess, map the fp addresses the source spells
+        # through the camera's table (fwtarget.translate_c), compile that.  The
+        # -D values are this camera's already and go in as decimal.
+        pre = tmp / (src.stem + '.i')
+        r = subprocess.run([clang, *CFLAGS, *fwtarget.c_defines(defs), '-E', *inc, str(src), '-o', str(pre)],
+                           capture_output=True, text=True)
+        if not r.returncode:
+            pre.write_text(fwtarget.translate_c(pre.read_text(), src.name))
+            r = subprocess.run([clang, *CFLAGS, '-x', 'cpp-output', '-c', str(pre), '-o', str(obj)],
+                               capture_output=True, text=True)
     if r.returncode:
         raise BuildError(f'{src.name}: compile failed:\n' + r.stderr)
     text = elf_text.load_text(obj)
@@ -77,7 +99,8 @@ def compile_unit(tmp, src, entry, extra=(), ui=False):
     return text
 
 
-MARK_DEFINES = ['-DBOOT_MARKERS=1', '-DMARK_AT=0xC072E064u', '-DMARK_DATA=0xC072E0B4u', '-DMARK_BYTES=0x98u',
+MARK_DEFINES = ['-DBOOT_MARKERS=1', f'-DMARK_AT=0x{fwtarget.fw(0xC072E064):08X}u',
+                f'-DMARK_DATA=0x{fwtarget.fw(0xC072E0B4):08X}u', '-DMARK_BYTES=0x98u',
                 '-DMARK_LIVE=0x314B524Du', '-DMARK_SEEN=0x444B524Du', '-DMARK_NONE=0x454E4F4Eu']
 # = build_autorun.py MARK_AT (CAVE_ARENA), MARK_BYTES, MARK_MAGIC; 'MRKD' seen, 'NONE' stale
 

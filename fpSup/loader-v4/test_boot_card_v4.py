@@ -20,11 +20,13 @@ import build_v4 as B
 import build_v3 as V3
 import test_v3 as T3
 
-# addresses as in v3/test_boot_options.py
-SITE, SITE_STOCK = 0xC03DA420, 0xEB0000CC          # warm-boot loader hook site
-STORE, BOOT_AT = 0xC3075264, 0xC072F700            # Fast Start 3 store, its bootstrap
-ECHO, ECHO_STOCK, ABORT = 0xC0BAC2F8, 0xC03D99A0, 0xC072F080
-TABLE, LINE, POP = 0xC2F20FC0, 0xC03DA7A8, 0xC0420D90
+# addresses as in v3/test_boot_options.py: the fp's, mapped for the camera
+# FPSUP_CAMERA names (fwtarget.fw; the image is T3.IMAGE, that camera's)
+from fwtarget import fw, target                       # noqa: E402
+SITE, SITE_STOCK = fw(0xC03DA420), 0xEB0000CC      # warm-boot loader hook site
+STORE, BOOT_AT = fw(0xC3075264), fw(0xC072F700)    # Fast Start 3 store, its bootstrap
+ECHO, ECHO_STOCK, ABORT = fw(0xC0BAC2F8), fw(0xC03D99A0), fw(0xC072F080)
+TABLE, LINE, POP = fw(0xC2F20FC0), fw(0xC03DA7A8), fw(0xC0420D90)
 CTX, FOBJ = 0xC3010000, 0xC3010200
 _built = {}
 
@@ -60,7 +62,7 @@ class Camera(T4.Camera):
         self.put(POP, 0xE12FFF1E)
         self.fallback = None
         self.put(TABLE + 0x21C, 2 if active else 0)
-        self.put(TABLE + 36 + 4, 0xC03DA158)
+        self.put(TABLE + 36 + 4, fw(0xC03DA158))
         self.put(TABLE + 72 + 4, LINE)
         self.put(TABLE + 72 + 12, CTX)
         self.put(CTX + 0x90, 1 if active else 0)
@@ -87,8 +89,8 @@ class Camera(T4.Camera):
         return [t for c, _, _, t in self.loadlog() if c == T4.CODES['LOADED']]
 
 
-MARK_AT, MARK_DATA, MARK_BYTES = 0xC072E064, 0xC072E0B4, 0x98
-LOAD_START_US, LOAD_DONE_US, CAVE_BUMP = 0xC072F6F4, 0xC072F6F8, 0xC072E060
+MARK_AT, MARK_DATA, MARK_BYTES = fw(0xC072E064), fw(0xC072E0B4), 0x98
+LOAD_START_US, LOAD_DONE_US, CAVE_BUMP = fw(0xC072F6F4), fw(0xC072F6F8), fw(0xC072E060)
 MRK1, MRKD, NONE = 0x314B524D, 0x444B524D, 0x454E4F4E
 
 
@@ -106,7 +108,7 @@ def run_autorun(cam, ar):
             cam.put(int(m.group(1), 16), int(m.group(2), 16))
         elif line == 'echo':
             h = cam.w(ECHO)
-            if h in (ECHO_STOCK, 0xC000E91C, 0xC000EABC):   # stock / cache publish: stubs here
+            if h in (ECHO_STOCK, fw(0xC000E91C), fw(0xC000EABC)):   # stock / cache publish: stubs here
                 continue
             _r, sp = cam.call(h)
             assert sp == T3.STACK - 0x1004, hex(sp)
@@ -141,7 +143,7 @@ class BootMarkersTests(unittest.TestCase):
 
     def test_off_is_byte_identical(self):
         self.assertEqual(built(True, True)[0], B.boot_card(splash=True, instant=True, fast=True, markers=False)[0])
-        self.assertNotIn(b'0xC072E064', built(True, True)[0])
+        self.assertNotIn(f'0x{MARK_AT:08X}'.encode(), built(True, True)[0])
 
     def test_slow_path_seven_stamps_around_the_loader(self):
         ar, blob, _ = B.boot_card(splash=True, instant=True, fast=True, markers=True)
@@ -218,7 +220,7 @@ class BootCardV4Tests(unittest.TestCase):
     def test_card_build_is_the_merge_page_shell(self):
         ar, _blob, info = built(True, True)
         backup = HERE.parents[1] / 'projects/loader-v4/validation/card-backup-20261020/AutoRun.txt'
-        if backup.exists():
+        if backup.exists() and target() == 'fp':       # that card was an fp's
             self.assertEqual(ar, backup.read_bytes())
         self.assertTrue(info['instant'] and info['fast'] and info['splash'])
         self.assertIn(b'display osdfile \\fpSup\\UI\\0.BIN', ar)

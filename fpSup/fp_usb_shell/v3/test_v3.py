@@ -14,7 +14,12 @@ import pathlib, struct, sys, unittest
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
-IMAGE = HERE.parents[2] / 'out' / 'MAIN_c0000000.bin'
+import fwtarget                                           # noqa: E402
+from fwtarget import fw                                   # noqa: E402
+# The firmware image and addresses of the camera FPSUP_CAMERA names: the
+# sources spell the fp's, fw() maps them (cameras/*.tsv).
+IMAGE = HERE.parents[2] / ('out' if fwtarget.target() == 'fp' else 'out_' + fwtarget.target()) \
+    / 'MAIN_c0000000.bin'
 
 try:
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE
@@ -45,10 +50,11 @@ F = dict(F_MGR=0xC0444658, F_VOL=0xC0444698, F_CTOR=0xC0365E90, F_OPEN=0xC0365FB
          TK_CRE=0xC0016A58, TK_STA=0xC0016BC0, F_WRITE=0xC03660E8,
          D_FILE=0xC03E4270, D_SLEEP=0xC03705D8, CYC_DRAW=0xC05278F8,
          UI_CLEAR=0xC0527DD8, UI_FORCE=0xC0527E68)
-DRAW, DRAW_STOCK, DRAW_PAUSED = 0xC0528700, 0xE92D4BF0, 0xE12FFF1E
+F = {k: fw(v) for k, v in F.items()}
+DRAW, DRAW_STOCK, DRAW_PAUSED = fw(0xC0528700), 0xE92D4BF0, 0xE12FFF1E
 
 # Real firmware words, used as sites: the gyro's accel/start/stop hooks.
-SITE_A, SITE_B, SITE_C = 0xC050D4C8, 0xC03790B8, 0xC038C484
+SITE_A, SITE_B, SITE_C = fw(0xC050D4C8), fw(0xC03790B8), fw(0xC038C484)
 NOP = 0xE1A00000
 
 # struct state, mirrored from sloader.c (checked by test_state_layout).
@@ -485,7 +491,7 @@ class LoaderV3Tests(unittest.TestCase):
     def test_shell_sup_zeroes_a_stale_claim_patches_the_interface_and_spawns(self):
         import patches
         iface, want, *_ = patches.IFACE[0]
-        state = 0xC072F000
+        state = fw(0xC072F000)
         img = IMAGE.read_bytes()
         cam = Camera(*card(('00SHELL.BIN', B.shell_sup())), stale={state: 0x4C485356})
         cam.boot()
@@ -523,7 +529,7 @@ class LoaderV3Tests(unittest.TestCase):
         cam.boot()
         self.assertEqual(cam.tasks, [])                              # no worker
         self.assertEqual(cam.w(iface), 0xDEADBEEF)                   # the other's
-        self.assertEqual(cam.w(0xC072F000), 0)                       # STATE untouched
+        self.assertEqual(cam.w(fw(0xC072F000)), 0)                       # STATE untouched
         self.assertIn('10SHELL.BIN', [t for c, _, _, t in cam.log() if c == 'RELEASED'])
 
     def test_load_log_is_written_whole(self):

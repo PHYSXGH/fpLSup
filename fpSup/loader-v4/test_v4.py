@@ -447,6 +447,19 @@ class LoaderV4Tests(unittest.TestCase):
         self.assertLess(blocks(cam)['SHELL.BIN'], ALIAS)               # not SL_F_CACHED_OK
         self.assertTrue(cam.tasks, 'the worker was not spawned')
 
+    def test_shell_declares_this_cameras_stock_words(self):
+        """On a fresh image nothing is stale, so a REPAIRED line means the sup
+        declared a stock word the firmware does not have -- the loader then writes
+        that word into the code at boot and again at power-off.  The fp L shell
+        did exactly that with the fp's words (card r1, 2026-11-03)."""
+        cam = boot(('SHELL.BIN', B.shell_sup()))
+        repaired = [(a, n) for c, a, n, _ in cam.loadlog() if c == 12]
+        self.assertEqual(repaired, [], [hex(a) for a, _ in repaired])
+        img = T3.IMAGE.read_bytes()
+        for a, n, saved in cam.journal():
+            if 0xC0000000 <= a < 0xC0000000 + len(img) and a < cave.CAVE_ARENA - 0x200:
+                self.assertEqual(saved, img[a - 0xC0000000:a - 0xC0000000 + n], hex(a))
+
 
 B_PAGE_ROWS = 5
 

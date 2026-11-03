@@ -29,7 +29,13 @@ SL_DIR = 'fpSup'
 SL_SELF = 'LOADER.BIN'
 UI_DIR = SL_DIR + '\\UI'                    # the four-box frames: a folder, so the
                                               # 加載器's listing skips it
-IMAGE = ROOT / 'out' / 'MAIN_c0000000.bin'
+import fwtarget                                # noqa: E402
+# The reference image the stock bytes of every patch come from: the image of
+# the camera FPSUP_CAMERA names (out/ for the fp, out_fpl/ for the fp L).  It
+# was the fp's for every camera, so an fp L patch sup declared the fp's words
+# at fp L addresses: the loader "repaired" each site to them at boot and wrote
+# them back at power-off (Loader v4 card r1 on the fp L, 2026-11-03).
+IMAGE = ROOT / ('out' if fwtarget.target() == 'fp' else 'out_' + fwtarget.target()) / 'MAIN_c0000000.bin'
 SL_MAGIC = 0x31425346                         # "FSB1"
 SL_HEADER_LEN = 32
 SL_SVC_VERSION = 3                            # sloader.h; 3 = holder, self, SL_SVC_AT

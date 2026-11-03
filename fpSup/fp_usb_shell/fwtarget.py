@@ -234,6 +234,41 @@ def translate_asm(text, where='', poisons=None):
     return ''.join(out)
 
 
+_HEX_C = re.compile(r'\b0[xX]([cC][0-9a-fA-F]{7})([uU]?[lL]{0,2})\b')
+
+
+def translate_c(text, where=''):
+    """Rewrite the address constants in preprocessed C (`clang -E`: no comments
+    left, only what the unit uses).  A suffix (0x...u) is kept.  Any address the
+    table cannot map is fatal: after preprocessing, every constant is used."""
+    if CAMERAS[target()] is None:
+        return text
+    missing = []
+
+    def sub(m):
+        a = int(m.group(1), 16)
+        try:
+            return f'{fw(a):#010x}{m.group(2)}'
+        except UnmappedAddress as e:
+            missing.append(f'  {where}: {e}')
+            return m.group(0)
+    out = _HEX_C.sub(sub, text)
+    if missing:
+        raise UnmappedAddress('\n'.join(['addresses with no mapping:'] + sorted(set(missing))))
+    return out
+
+
+def c_defines(defines):
+    """-D values for a C build on another camera: a hex 0xC... value is already
+    this camera's (it came from Python through fw()), so it goes in as decimal
+    and translate_c leaves it alone -- armasm's rule for assembly."""
+    out = []
+    for d in defines:
+        m = re.fullmatch(r'(-D\w+=)0[xX]([0-9a-fA-F]+)([uU]?)', d)
+        out.append(f'{m.group(1)}{int(m.group(2), 16)}{m.group(3)}' if m else d)
+    return out
+
+
 def poison_hits(code, poisons):
     """fp addresses whose poison value reached the assembled code: as a word,
     as an ARM movw/movt pair's halves, or as a Thumb-2 movt."""
