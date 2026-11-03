@@ -49,10 +49,41 @@ plane, the fp research's precision. Blocks 1 and 2 do not fit (≈10⁻³).
 - Node count: each axis row holds 12 (0x30 bytes); this lens fills all 12. Likely rule: entries before
   0x7FFFFFFF. To confirm with a lens with fewer nodes.
 
+## Second lens: SIGMA 28-70mm F2.8 DG DN (zoom), 2026-11-03
+
+Same block, same address, one more dimension. Dumps (not committed):
+`private/lensram_0xC3079000-0xC3084000_28-70mm_at28_20261103.bin` (read at 28 mm).
+**What the block is** (`tools/lens_block.py` decodes it), from F = 0xC307B9D4:
+
+| offset | content | 45mm prime | 28-70 zoom |
+|---|---|---|---|
+| +0x000 | zoom positions, u32 tenths of mm, until 0xFFFF (up to 15) | 1: 45.0 | **9: 28.9 32.7 36.5 38.6 40.9 43.0 45.3 52.0 67.7** |
+| +0x03C | focus axis, one row per zoom × aperture, Nn u32 each | 3 × 12 | 27 × 8 (last node per zoom: close focus 170 → 338 mm) |
+| +0x3CC | apertures, Av × 1024, per zoom × aperture | 3 | 27 (≈ Av 3.09 / 4.07 / 5.06, drifting slightly with zoom) |
+| +0x480 | [zoom][aperture][node][plane] × 4 f64 | 108 records | **648** = 9 × 3 × 8 × 3 |
+
+Counts: Nz = entries before 0xFFFF in the zoom list; Na = aperture entries / Nz; Nn = axis entries before the
+fill / (Nz × Na). Both lenses fit. **"The focal the data was measured at" (fp DIST_FOCAL, distfit's
+pg_dist_focal) is just the first zoom position**: with a zoom it is always the wide end. Fix in the new code
+(and worth noting for the fp).
+
+Model (`lens_block.py` + a per-row fit): one focus distance and one Av per take; in each zoom row, t from
+that row's own axis and u from its own apertures (both clamped); blend the two zoom rows linearly in focal
+length; then kr_j × s^(2j).
+
+| take | DNG | fit | error |
+|---|---|---|---|
+| A001_104 | 28 mm F2.8, 4K | 28.000 mm (below 28.9 → clamped), Av 2.9709 (= F2.8, clamped to block 0), s 0.993564 | 2.2e-14 |
+| A001_105 | 28 mm F5.6, 4K | 28.000 mm, **Av 5.0000**, s 0.993564 | 6.3e-14 |
+| A001_106 | 50 mm F2.8, 4K | 50.05 mm, Av 2.9709, s 0.99324 | **2.9e-5, not exact** |
+
+Between zoom positions the camera blends in some way not reproduced yet (not linear in mm on the
+coefficients, or after a conversion). It is **sub-pixel**: ≤ 0.26 px at the corners of a 4K frame worst case
+(~0.06 px realistic). Good enough for Gyroflow; exactness open.
+
 ## Not known yet (needed before the camera can write distortion on the fp L)
 
-1. **Node count**: 12 here, 5 on the fp's lens. Where does the firmware keep it? (Look near the focal word
-   at 0xC307B9D0 = 61189 / the 0xFFFF fill, or in DistConverter's code.) distfit.inc.S hard-codes 5.
+1. ~~Node count~~: derived from the data (see the 28-70 section). distfit.inc.S hard-codes 5.
 2. ~~What blocks 1–2 are~~: apertures, **in APEX Av × 1024** (settled by A001_103: 4188 + 0.455078 × 2048 =
    **5120.0 = Av 5.0** = F5.657, the true "F5.6"; F×1024 would be 5734; F4 gave 4096 = Av 4.0). The blocks are
    Av 3.42 / 4.09 / 6.09 (≈ F3.3 / F4.1 / F8.2). F2.8 (Av 2.97) is below block 0 and clamps to it, which is
@@ -65,7 +96,8 @@ plane, the fp research's precision. Blocks 1 and 2 do not fit (≈10⁻³).
    every crop. A crop-dependent cap cannot remove s (identical for FHD and 4K). If confirmed, the code can
    derive s from the sensor facts instead of hard-coding it. **A001_103 (4K F5.6) fitted s freely: 0.993564
    again**, a constant across FHD/4K and three apertures.
-4. **Whether the addresses stay put with another lens** (also open on the fp).
+4. ~~Whether the addresses stay put with another lens~~: yes for the 28-70 (same F, same offsets).
+7. **Zoom interpolation** between zoom positions: sub-pixel with linear-in-mm, not exact (A001_106).
 5. **The fp L's distfit**: it would need the node count, the block choice and the normalisation; the fp's
    version reads 5 nodes at fixed addresses.
 6. **The current aperture and focus at run time**, from the camera (the fp uses F_FOCUS_POS / F_FOCUS_DIST
