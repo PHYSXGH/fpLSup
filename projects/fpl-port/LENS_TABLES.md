@@ -38,8 +38,12 @@ plane, the fp research's precision. Blocks 1 and 2 do not fit (≈10⁻³).
 | A001_101 | FHD 1936 × 1090 | F4 | blocks 0–1, u 0.8655 × nodes 5–6, t 0.7513 | exact (4e-9) |
 | A001_103 | 4K 3856 × 2170 | F5.6 | blocks 1–2, u 0.455078 × nodes 8–9, t 0.496223, **s fitted free: 0.993564** | exact (5.6e-16) |
 
-- **s is a constant (0.993564)**: the same for FHD and 4K (different crops, 9552 vs 8208 columns). It is
-  not a frame-size normalisation. Its source is still to find (a constant of this lens or of the camera).
+- **s is a constant (0.993564)**: the same for FHD and 4K. Its source is still to find (a constant of this
+  lens or of the camera). *Corrected 2026-11-03:* this said the two cover different crops (9552 vs 8208
+  columns). They do not: the 4K takes are mode 161 (9568 × 5382, 1:1) and the FHD takes mode 173
+  (3184 × 1796, bin 3 = 9552 columns), the same width within 16 columns (`imx455_modes.csv`). So these
+  takes cannot tell a frame-size normalisation from a constant; the firmware's own two doubles (item 3)
+  are what settle it.
 - **The blocks are apertures**, interpolated linearly: the table is 2D, focus distance × aperture.
 - Block apertures, very likely: **3504, 4188, 6236** at focal+0x3CC (0xC307BDA0, three u32, nothing else
   in the gap). F4 between blocks 0 and 1 at u 0.8655 → 3504 + 0.8655 × 684 = **4096.0**. That is F4 in two
@@ -126,13 +130,15 @@ fp L; the fp's gyro code checks 0x07FFFFFF.
    image's half-diagonal in mm / the 36 × 24 mm half-diagonal (21.633 mm): 9520 × 6328 px at 3.76 µm gives
    21.491 mm → 0.99341; s exactly needs a pitch of 3.76057 µm (2×10⁻⁵ off at 3.76). So the lens data are
    likely normalised to the full-frame image circle and the camera rescales to its own sensor, the same for
-   every crop. A crop-dependent cap cannot remove s (identical for FHD and 4K). If confirmed, the code can
+   every crop. (FHD and 4K agreeing says little here: both cover the full width, see above.) If confirmed, the code can
    derive s from the sensor facts instead of hard-coding it. **Found (2026-11-03):** the fp L image holds
    s's two halves as doubles: **21.49079172691411 at 0xC02D7D08** (one entry of a table of half-diagonals
    from 0xC02D7CE8: 18.35, 19.33, 15.64, 17.40, 21.49, 14.08 … mm) and **21.63 at 0xC0044528** (also
    0xC0042E24, 0xC0043F28). The lens module divides a stored half-diagonal by 21.63 (0xC0044374). The quotient
    is **0.993564111**, the fitted s to every digit the fits give. **A001_103 (4K F5.6) fitted s freely: 0.993564
-   again**, a constant across FHD/4K and three apertures.
+   again**, a constant across FHD/4K (both full width) and three apertures. Not yet checked on a cropped
+   mode (e.g. 184–187 at 8208 columns, or the 1.5× crop at 6288); a take in one would show whether s
+   stays put when the frame covers less of the sensor.
 4. ~~Whether the addresses stay put with another lens~~: yes for the 28-70 (same F, same offsets).
 7. **Zoom interpolation**: **linear in mm**, but with a focal **finer than the camera reports**. Three takes
    between zoom positions, each fitted by one weight for all four coefficients:
