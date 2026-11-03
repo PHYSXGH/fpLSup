@@ -23,6 +23,13 @@ sys.path.insert(0, str(HERE.parent / 'fp_usb_shell'))
 
 import imu_stream as S                                         # noqa: E402
 from armasm import assemble                                    # noqa: E402
+import fwtarget                                                # noqa: E402
+
+# The firmware image the hook sites are checked against: the one for the camera
+# this run builds for.  Addresses written in the sources are the fp's; fw()
+# maps them (fp_usb_shell/fwtarget.py, cameras/*.tsv).
+IMAGE = HERE.parent.parent / ('out' if fwtarget.target() == 'fp' else 'out_' + fwtarget.target()) \
+    / 'MAIN_c0000000.bin'
 
 ACCEL = (HERE / 'accel_hook.S').read_text()
 DRAIN = (HERE / 'gyro_drain.S').read_text()
@@ -1153,7 +1160,7 @@ class ModeHook(unittest.TestCase):
     a Base card that arms a hook it did not place, and a build that still
     thinks it is only watching when we believe it is armed."""
 
-    FW = HERE.parent.parent / 'out' / 'MAIN_c0000000.bin'
+    FW = IMAGE
     SRC = (HERE / 'mode_hook.S').read_text()
 
     def setUp(self):
@@ -1220,8 +1227,8 @@ class ModeHook(unittest.TestCase):
         # source and the define came along for the ride, so this asks the
         # assembled bytes rather than the text.
         import re as _re
-        site = int(_re.search(r'^\.equ MODE_SITE,\s*(0x[0-9A-Fa-f]+)',
-                              (HERE / 'ring_task.inc.S').read_text(), _re.M).group(1), 0)
+        site = fwtarget.fw(int(_re.search(r'^\.equ MODE_SITE,\s*(0x[0-9A-Fa-f]+)',
+                              (HERE / 'ring_task.inc.S').read_text(), _re.M).group(1), 0))
         import struct as _struct
         def arms(defines):
             code = assemble(HERE / 'gcsv_task.S', defines)
@@ -1298,8 +1305,8 @@ class ModeHook(unittest.TestCase):
         inc = (HERE / 'ring_task.inc.S').read_text()
         ba = (HERE.parent / 'fp_usb_shell' / 'build_autorun.py').read_text()
         lo = _const('CAVE_ARENA', ba)
-        hi = int(equ('CAVE_ARENA_END', inc), 0)
-        self.assertEqual(int(equ('MODE_SITE', inc), 0), self.site)
+        hi = fwtarget.fw(int(equ('CAVE_ARENA_END', inc), 0))
+        self.assertEqual(fwtarget.fw(int(equ('MODE_SITE', inc), 0)), self.site)
         import imu_stream_deploy as D
         for _name, spec in D.PRODUCERS.items():
             site = spec[2]
@@ -1368,7 +1375,7 @@ class PowerOff(unittest.TestCase):
         got = {at: struct.unpack('<I', blob)[0] for at, blob, _ in B.hook_sites()}
         want = {site: orig for (_s, _d, site, orig, _t) in D.PRODUCERS.values()}
         self.assertEqual(got, want)
-        image = HERE.parents[1] / 'out' / 'MAIN_c0000000.bin'
+        image = IMAGE
         if image.exists():
             raw = image.read_bytes()
             for site, orig in want.items():
