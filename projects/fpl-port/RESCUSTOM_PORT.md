@@ -503,3 +503,20 @@ same 4784 -> 3856 width ratio; 3190 -> 2568 is 1.242, the same within a line) an
 **OG4K records on the fp L (card r7, 2026-11-04).** A001_140 (23.98, 54 frames) and A001_141 (17.98,
 65 frames): 3856x2568 8-bit, DefaultCrop 3840x2552 at (8,8), FrameRate 23.976 / 17.982; clean 3:2
 open-gate pictures, edge to edge, frame brightness steady (the earlier swings were the stale buffer).
+
+**Card r8 (2026-11-04): OG48K retried, on OG4K's pattern.** `cards/20261104-rescustom-og48k-r8` = r7 +
+`RESCUS\OG48K.RCD` (`ae7584e4…`): base p2061 (video, flagged) instead of the still p1003, 8-bit only,
+raster 4784x3184 / active 4768x3168 from mode 98's 4784x3190 binned read, downscale 1023 (1:1, stock's
+unscaled value), preview p1003's (1616x1066 / 1590x1056), clamp on. 23.98 / 24 / 25 / 29.97 + 17.98.
+Open: the recorder at 4784 wide (stock's widest recording is 4096) and the card rate: 15.2 MB a frame
+(UHD 8.4 MB; UHD 23.98 already stops at ~104 frames on this card).
+
+**OG48K records on the fp L (card r8, 2026-11-04).** LOAD.LOG `OCD02020200`. A001_142 (23.98, 23
+frames) and A001_143 (17.98, 32 frames): 4784x3184 8-bit (15,312,384 B a frame), DefaultCrop 4768x3168
+at (8,8), FrameRate 23.976 / 17.982; clean full-sensor 3:2 pictures, edge to edge, steady exposure. So
+the recorder takes 4784 wide -- r1's crash was the mode searches, not the width. The clips are short
+(about 1 and 1.8 s): the camera stopped by itself -- the user's test SD card is slow (the 104-frame
+UHD clips likewise). Longer takes need a fast card or an external SSD (the fp L supports one; not tried).
+Rates for the SSD test (MB/s, decimal): OG48K (15.31 MB a frame) 17.98 ~275, 23.98 ~367, 24 ~367, 25 ~383,
+29.97 ~459; OG4K (9.98 MB) ~180 / ~240 / ~240 / ~250 / ~300. The user expects the SSDs to sustain
+350-400 MB/s or more.

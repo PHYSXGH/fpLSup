@@ -74,7 +74,7 @@ if L.FPL:
     # port phase 3 (projects/fpl-port/RESCUSTOM_PORT.md); until then the core ships alone
     # fpl_formats.py.  Not UHDX: its active size is stock UHD's, so ogc_name labels any UHD-sized key
     # UHDX (camera, r6: OG4K recorded as UHDX) -- a diagnostic, kept in fpl_formats.py as the record.
-    FORMATS = ('og4k',)
+    FORMATS = ('og4k', 'og48k')
 JOSE = ('s16', 'og35k', 'og4k')       # jose_formats.py (milestone 5)
 GEOMETRY = {'OG3K': 'OG3K 3008x2000', 'OG2K': 'OG2K 2000x1334'}   # the menu sups' row texts
 

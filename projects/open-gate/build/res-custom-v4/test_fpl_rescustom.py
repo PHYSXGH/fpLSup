@@ -75,9 +75,9 @@ class FplBuildTests(unittest.TestCase):
         return {int(h['site'], 16): int(h['replay'], 16) for h in self.f['hooks']}
 
     def test_the_formats_ship(self):
-        """OG4K only: UHDX (stock UHD under a new name) would take every UHD-sized key (ogc_name)"""
-        self.assertEqual(self.f['formats'], ['og4k'])
-        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['OG4K.RCD'])
+        """OG4K and OG48K; not UHDX (stock UHD under a new name would take every UHD-sized key, ogc_name)"""
+        self.assertEqual(self.f['formats'], ['og4k', 'og48k'])
+        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['OG48K.RCD', 'OG4K.RCD'])
 
     def test_og4k_rides_on_mode_98(self):
         import rcd
