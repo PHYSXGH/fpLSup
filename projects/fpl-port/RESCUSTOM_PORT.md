@@ -458,3 +458,34 @@ RES-Custom recording crash on the fp L (OG48K, OG4K, UHDX r3/r4).
 Clip `A001_136` (r5, UHDX): 104 frames, 4.3 s, 3856x2170 8-bit uncompressed, ActiveArea 0,0,2170,3856,
 DefaultCrop 3840x2160 at (8,5), FrameRate 23.976 -- the same tags and file size (8,447,488 B) as a
 stock UHD clip (A001_131). Frame 50 is a clean picture, no lines.
+
+**Card r6 (2026-11-04): OG4K retried.** `cards/20261104-rescustom-og4k-r6` = r5 + `RESCUS\OG4K.RCD`
+(`24d5daa4…`): the r2 recipe (p2061, raster 3856x2568, active 3840x2552, mode 98 read 4784x3190 at
+scale 2.0, clamp on), now 8-bit only (the virtual pids are in the 8-bit CinemaDNG block). Entries:
+23.98 / 24 / 25 / 29.97 and the virtual 17.98, all on mode 98. Core and UHDX.RCD as r5.
+
+**OG4K on the camera (r6, 2026-11-04): records, but the files are UHD.** The user recorded OG4K at 23.98
+and at 17.98; no crash. LOAD.LOG `OCD02020200` (2 found, 2 accepted, 2 rows); the BIN's saved record says
+OG4K at the virtual 17.98 (SEL "OG4K", FLAGS 0x70601). But A001_137 (104 frames) and A001_138 (161) are
+3856x2170, DefaultCrop 3840x2160, FrameRate 23.976 -- tag for tag the stock UHD / UHDX clip (A001_136), and
+16:9 pictures. So the recording path did not take OG4K's raster (canvas_rec 3856x2568) nor the virtual
+rate's DNG rate. (Audio length / frame count is no rate measure here: UHDX at 23.98 gives 17.8 too.)
+Open: what live view showed, and what the picker handed out at record (recdiag over USB).
+
+**Why r6 recorded UHD: ogc_name's size match picks UHDX (camera, USB, 2026-11-04).** recdiag at OG4K
+17.98: the picker's last entry was `UHDX23_98FPS` (pid 2040, mode 231), PBROW 2. ogc_name matches the
+request's sizes against every row's active size before it looks at S.CUR; UHDX's active size is stock
+UHD's 3840x2160, so the key built for OG4K's recording (base p2061, UHD sizes) got UHDX's label. A
+diagnostic format that is stock UHD under a new name collides with UHD itself -- it must not ship beside
+other formats (or with stock UHD: a stock UHD clip's playback would say UHDX too).
+RAM test: UHDX row (S+0xB74) +0x10 AW := 0 -> the picker hands out `OG4K23_98FPS` (pid 2020, mode 230,
+donor 98, vm filled), PBROW 0.
+
+**OG4K's first recording (A001_139, same session, 17.98):** no crash; 53 frames, 3856x2568 8-bit,
+DefaultCrop 3840x2552 at (8,8), FrameRate 17.982 -- the format's tags are right. The pictures are not:
+frame means jump 16..229 frame to frame, and the frames are mosaics -- the scene appears twice in the left
+half (one copy shifted a Bayer phase: green vs magenta), the right half is a different, noisy image,
+some frames are washed out pink. Reading: the recorder writes a buffer whose geometry is not the
+raster the DNG declares (the 4784x3190 read not scaled to 3856x2568, or a different line pitch), and
+exposure is not under control (per-frame brightness swings). Next: what the fp L's recording path takes
+the read size / scale / line pitch from (canvas +0xF4..+0x104 were the fp's) and the exposure for mode 230.

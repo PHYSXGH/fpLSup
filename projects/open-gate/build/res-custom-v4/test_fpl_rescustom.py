@@ -74,25 +74,19 @@ class FplBuildTests(unittest.TestCase):
     def replays(self):
         return {int(h['site'], 16): int(h['replay'], 16) for h in self.f['hooks']}
 
-    def test_the_diagnostic_format_ships(self):
-        """OG48K and OG4K crashed recording on the camera (2026-11-04); UHDX, stock UHD under a new
-        name, separates the core's recording path from the open-gate content"""
-        self.assertEqual(self.f['formats'], ['uhdx'])
-        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['UHDX.RCD'])
+    def test_the_formats_ship(self):
+        """OG4K only: UHDX (stock UHD under a new name) would take every UHD-sized key (ogc_name)"""
+        self.assertEqual(self.f['formats'], ['og4k'])
+        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['OG4K.RCD'])
 
-    def test_uhdx_is_stock_uhd_23_98(self):
+    def test_og4k_rides_on_mode_98(self):
         import rcd
-        d = rcd.decode((self.out / 'RESCUS' / 'UHDX.RCD').read_bytes(), self.img, None)
+        d = rcd.decode((self.out / 'RESCUS' / 'OG4K.RCD').read_bytes(), self.img, None)
         self.assertEqual((d['profile'], d['base_row'], d['act'], d['aspect'], d['flags']),
-                         (2061, 1841, (3840, 2160), 3, 0))
-        keys = {e['key']: e for e in d['entries'] if not e['vrate']}
-        self.assertEqual(set(keys), {'UHDX23_98FPS'})
-        tt = 0xC0B90FF8
-        m161 = next(struct.unpack_from('<3I', self.img, tt + 0x20 * i - 0xC0000000) for i in range(85)
-                    if struct.unpack_from('<I', self.img, tt + 0x20 * i - 0xC0000000)[0] == 161)
-        e = keys['UHDX23_98FPS']
-        self.assertEqual((e['donor'], e['w0'], e['w1']), (161, m161[1], m161[2]), 'the stock timing word for word')
-        self.assertTrue(all(off in (0x90, 0x1C) for off, _ in d['canvas_rec'] + d['canvas_pb']))
+                         (2061, 1841, (3840, 2552), 2, 1))
+        self.assertEqual({e['key'] for e in d['entries']},
+                         {'OG4K23_98FPS', 'OG4K24FPS', 'OG4K25FPS', 'OG4K29_97FPS'})
+        self.assertTrue(all(e['donor'] == 98 for e in d['entries']))
 
     def test_the_three_picks_are_bl_hooks_on_the_lookups_and_last(self):
         hooks = self.hooks()
@@ -131,13 +125,13 @@ class FplBuildTests(unittest.TestCase):
         import test_v4 as T4
         if T4.Uc is None:
             self.skipTest('needs unicorn')
-        rcdb = (self.out / 'RESCUS' / 'UHDX.RCD').read_bytes()
+        rcdb = (self.out / 'RESCUS' / 'OG4K.RCD').read_bytes()
         files, dirs = T4.card((NAME, self.core), extra=[('RESCUS', 0x10, 0)])
         files['\\fpSup\\LOAD.LOG'] = b''
         dirs['\\fpSup\\RESCUS'] = []
         if with_rcd:
-            files['\\fpSup\\RESCUS\\UHDX.RCD'] = rcdb
-            dirs['\\fpSup\\RESCUS'] = [('UHDX.RCD', 0x20, len(rcdb))]
+            files['\\fpSup\\RESCUS\\OG4K.RCD'] = rcdb
+            dirs['\\fpSup\\RESCUS'] = [('OG4K.RCD', 0x20, len(rcdb))]
         cam = T4.Camera(files, dirs)
         cam.boot()
         self.assertIsNone(cam.error)

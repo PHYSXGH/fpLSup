@@ -72,7 +72,9 @@ if L.FPL:
     # the five are IMX410 formats: their donor modes are fp sensor modes the fp L
     # (IMX455) does not have, so rcd.decode refuses them (ENTRY).  fp L formats are
     # port phase 3 (projects/fpl-port/RESCUSTOM_PORT.md); until then the core ships alone
-    FORMATS = ('uhdx',)                # fpl_formats.py (phase 3: og48k and og4k crashed recording; the diagnostic)
+    # fpl_formats.py.  Not UHDX: its active size is stock UHD's, so ogc_name labels any UHD-sized key
+    # UHDX (camera, r6: OG4K recorded as UHDX) -- a diagnostic, kept in fpl_formats.py as the record.
+    FORMATS = ('og4k',)
 JOSE = ('s16', 'og35k', 'og4k')       # jose_formats.py (milestone 5)
 GEOMETRY = {'OG3K': 'OG3K 3008x2000', 'OG2K': 'OG2K 2000x1334'}   # the menu sups' row texts
 

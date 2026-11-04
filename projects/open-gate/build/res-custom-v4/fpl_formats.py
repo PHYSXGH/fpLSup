@@ -89,6 +89,8 @@ ROWS = {
         row_text='UHDX 3840x2160', summary='UHDX',
         bit_depths=(8,),                  # the virtual ids are in the 8-bit CinemaDNG block (ogc_layout)
     ),
+    # 2026-11-04 (card r2): crashed at record start -- the IMX455-only mode searches (lk_x3c/x5c/x0c,
+    # fixed in cb0b6b24), not the content.  Card r6 retries it with that core, beside UHDX.
     'og4k': dict(
         label='OG4K', profile=OG4K_BASE, enum=8,                # uishare ui/enums.py 'OG4K' (Jose's value)
         stock_value=3, aspect=2, flags=L.RFLAG_CLAMP, video_base=True,
@@ -107,7 +109,7 @@ ROWS = {
                    (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
         rate_canvas=[],
         row_text='OG4K %dx%d' % OG4K_ACT, summary='OG4K',
-        bit_depths=(8, 10, 12),
+        bit_depths=(8,),                  # the virtual ids are in the 8-bit CinemaDNG block (ogc_layout)
     ),
 }
 
