@@ -95,3 +95,25 @@ fp L's key composition and the meaning of the id, then serve our formats' entrie
 
 Code changes for the fp L besides addresses: angtv's replay; ogc.c's G_MAG constant (return v + 8); leave out
 v32/binpath; the picker.
+
+## The picker on the fp L (static, 2026-11-04)
+
+The fp's chain: FUN_c043b828 copies a 16-byte key template, two vtable calls (+0xC, +0x10) append the
+resolution and rate, "CROP" is appended in Crop Mode, then by raw bit type `[r6+0x20]` (4 → TAB1 8-bit,
+3 → TAB2 10-bit, else TAB3 12-bit) the picker 0xC043CCF8 walks that table's 16-byte entries {.., .., .., key*}.
+
+The fp L's counterpart is **0xC043BA20** (reached from the dispatcher 0xC043C0B8): the same template copy and
+the same two vtable calls, **no CROP append**, then:
+
+- `index = FUN_c043ccf8(r6 + 0x48)`: looks the value up in a 33-entry list at 0xC0CBE3A4 = **the crop
+  factors × 100** (100, 105, 111, 117 … 318 … 496), i.e. the crop step;
+- `desc = [obj + 0x588 + index × 4]`: one descriptor per crop step, with {base, count} pairs: +0x48 the 8-bit
+  table, +0x50 presumably 10-bit, +0x58 the 12-bit table (also +0x10, +0x18, +0x28 used by neighbours);
+- by bit type: **0xC043D0A8** (8-bit), **0xC043D108** (10-bit), **0xC043CE68** (12-bit), each the fp's picker
+  loop over {base, count} of 16-byte entries, **key at +0xC as on the fp**, returning the entry or 0.
+
+So the entry layout is the fp's; what changed is the table choice: per crop step instead of a "…CROP" key.
+Plan for res-custom on the fp L: hook the three lookups (r0 = the descriptor slot, r1 = the key), call
+ogc_pick with the bit depth the hooked lookup stands for, and return our entry in the same layout; the
+crop test moves from the key suffix to the crop step. Next: read a live descriptor (capture r0/r1 at one
+lookup on the camera) to see its tables' contents (sensor modes per crop step).
