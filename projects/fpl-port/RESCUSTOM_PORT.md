@@ -29,3 +29,41 @@ target maps to the fp L target):
 
 The generic table accessors res-custom hooks (`lk_tim`, `lk_meta`, `lk_r28`, `lk_r38`, `lk_r14`, `lk_r68`,
 `lk_reg`, `lk_r10`; FUN_c0320xxx / c0326db8 / c031ffa0) are identical on the fp L.
+
+## Which sensor routines the fp L really calls (camera, 2026-11-04)
+
+Call counters in RAM only (`cave.claim` block, three stubs; each entry's first word branched to its stub,
+the camera's own D/I-cache routines run through the borrowed `echo`; removed and read back afterwards).
+Card r4, cold boot. The user changed resolution, frame rate and crop, and recorded a clip:
+
+| entry | calls |
+|---|---|
+| IMX455 v32 (vtable 0xC0B90DF4 +0xC8, 0xC0326210, an empty stub) | **0** |
+| IMX455 binpath (+0xDC, 0xC0326268, an empty stub) | **0** |
+| generic geometry lookup F_GEOM (0xC0325140) | **42,129** |
+
+The fp L never calls v32 or binpath: mode rows come through the generic lookups, which res-custom also hooks
+(`lk_*`, identical code on the fp L). **On the fp L the v32 and binpath hooks are left out**; the virtual
+modes go through the generic hooks. Binning on the IMX455: start from `binkernel1/2` (mapped exactly).
+
+Also seen: the USB shell does not answer after a Fast Start restart with Loader v4 (card r4), though
+LOAD.LOG says it loaded; after a cold boot it answers. Open (Loader v4).
+
+## picker, mag (static, 2026-11-04)
+
+**mag** (fp 0xC043B6A4, `movw/movt r1` of "MAG4" at 0xC0BE46F0): the fp has two MAG4/MAG8 copies,
+loaded at 0xC043B2A4 (first) and the hook site (second). The fp L has its copies at 0xC0CBE118 / 0xC0CBE16C,
+loaded at 0xC043B618 (first) and **0xC043B8E8** (second): the hook site by that correspondence (the function
+changed: 12 of 120 masked words agree). `verify`. ogc.c's G_MAG returns the fp's MAG8 low half (0x46F8)
+as a constant: on the fp L it must be the fp L's (MAG8 = MAG4 + 8 in both: return v + 8).
+
+**picker** (fp 0xC043CCF8): a loop over a table of 16-byte entries (key at +0xC, strncmp 15) returning the
+match. The fp has **ten** such functions, one per table (26, 32, 48, 28, 16, 8, 4, 36, 18, 6 entries,
+0xC043CCF8 … 0xC0441358). The fp L has **one** (0xC043D5B8, 6 entries, = the fp's 0xC0441358), and right after
+it a **generic** lookup (0xC043D618) that takes each table's base and count from a descriptor
+(`[obj + 0x588 + index × 4]`, +0x18 base, +0x1C count). So on the fp L the recording-resolution picker res-custom
+hooks is not a function of its own: the hook belongs on the generic lookup, gated on which table is
+searched, and ogc_pick's `table == TAB1/2/3` test needs the fp L's tables. Next: the fp L's callers of the
+generic lookup for the 8/10/12-bit recording tables, and those tables' entry layout.
+
+**angtv** still to read.
