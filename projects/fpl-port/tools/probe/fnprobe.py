@@ -152,4 +152,5 @@ def poll():
         time.sleep(0.2)
 
 
-{'install': install, 'read': read, 'poll': poll, 'counts': counts, 'remove': remove}[sys.argv[1]]()
+if __name__ == '__main__':
+    {'install': install, 'read': read, 'poll': poll, 'counts': counts, 'remove': remove}[sys.argv[1]]()

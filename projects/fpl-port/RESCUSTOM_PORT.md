@@ -394,3 +394,19 @@ first calls 0xC032D0D8(out, mode): a mode id from 0xC0122050 (Thumb, outside the
 0xC0324818 (R28 row, hooked), 0xC032D078 / 0xC032D0A8 (geometry, hooked) and 0xC032DF58 (not read yet).
 Next: 0xC032DF58, 0xC0122050 and the defect-correction setup that follows in 0xC03161F0 -- defect /
 column correction keyed by the imager mode is the best fit for the vertical lines.
+
+**The camera writes its own evidence (user's idea, 2026-11-04).** `tools/probe/sdprobe.py` + `sd/sdtrig.S`:
+a trigger on the configurator's dispatcher (0xC043C0B8) writes a RAM block (the fnprobe records, or the
+caller's stack) to \PROBEn.BIN with the firmware's file calls (f_ctor 0xC03660A8, create 0xC03661C8,
+write 0xC0366300, close 0xC0366238, dtor 0xC03660E8; mem_heap/get/free as the loader) -- after cleaning
+the D-cache (the card write reads memory, not the cache: the first dumps were zeros / stale). The files
+survive the crash. Results:
+- fnprobe (6 fns), id 3 vs 230: with 230 nothing after the first dispatcher calls -- no ImagerDefect
+  call (0xC03161F0: 140 calls while recording with 3, 0 with 230), no mode change.
+- stack dumps at dispatcher calls 5/40/200 (id 3) and 5/25/60 (230): the same chain in both -- task
+  0xC036F068 -> 0xC0203DA8 -> 0xC02042F8 -> 0xC02076E8 -> 0xC0205A00 -> 0xC04CBF80 -> 0xC0205BA8 (AE,
+  the fps1 site; also the AE program line 0xC0227xxx) -> 0xC0437290. The dispatcher calls are auto-exposure
+  asking for the recording mode every frame, in both runs: not the stall.
+Next suspect: the R10 value (descriptor +0x10 {value, mode} pairs; "FUN_c0320008 programs the readout
+with it"): the core returns the donor's value only when the donor has a pair, else the firmware's
+lookup falls back to pair 0 for an id it does not know -- a real id (3) finds its own pair.
