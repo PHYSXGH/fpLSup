@@ -322,3 +322,40 @@ prefetch abort / data abort that records the first fault and parks the task). Ca
 
 Next (user, option 2): no invented mode id on the fp L. The entry carries the donor's real id, and while
 a res-custom row is live the core's lookup hooks give that id the format's rows.
+
+## Hunting the mode-id consumer (option 1, 2026-11-04, USB, RAM only)
+
+The user's description of the failure: first a semi-transparent overlay of colourful vertical lines, then
+after a second or two the live-view image itself gets lines at 45 degrees (a buffer read with the wrong
+line width). The CPU does not fault (vecprobe) and the shell sometimes lives on for a minute.
+
+Probes (`tools/probe/`), all with UHDX (virtual mode 230, donor 161), always pressing record at 23.98:
+
+- `magprobe.py`: the five magnifier-table scanners (index starts at -1: an unknown id reads the row
+  before the table). In live view they see only modes 9 and 12. A version that also swaps 230 -> 161
+  in r0/r1 did not prevent the lines.
+- `wideprobe.py`: all 19 functions with an inline per-mode scan, logging any call with 230 in r0..r3:
+  none, ever; the record start wakes six of them, all with real ids.
+- `cmpprobe.py`: the compare inside all 29 per-mode loops (21 inline scans and the firmware loops behind
+  the core's 8 hooked lookups), counting searches for 230 however the id got there: **none**. At record
+  start every loop runs, always for real ids; the hooked lookups never pass 230 down.
+- Static: no compare chains on mode ids; the only `cmp #161` is USB request handling; the index getters
+  (0xC03250E0..) turn the fake index back into a row pointer with the same stride, as on the fp; id 0x77
+  means "the current mode", read from the sensor object's +4.
+
+So no firmware code on the CPU looks our id up and gets it wrong -- yet the image hardware is set up
+wrong. The id must leave the lookup world: stored (sensor object +4) and handed on as a number, to code
+or hardware that keys its own setup on it (an image-processor command, a register value) rather than
+through any table the CPU scans.
+
+**Following the mode change (fnprobe, same day).** The sensor-control task (main loop 0xC0207AD0, waiting on
+event flags at object +0x52C) runs once per frame in live view and, when a change is requested, calls the
+mode-switch routine 0xC0207D38 (target mode at object +0x48), which calls 0xC0310E98 -> sensor task message
+(mode at +0x1C4) -> 0xC032A108 (the register-record handler, through the hooked lk_reg).
+- Reference (entry = p2020 + mode 161): at record start 0xC0310E98 is called with 161 from 0xC020808C
+  (inside 0xC0207D38), then 0xC03253A8 and 0xC032A108 with 161; at stop, back to 9.
+- Failing (entry = p2020 + mode 230): 0xC0207D38 is never entered; the per-frame calls of the loop freeze
+  at about the moment record is pressed, the shell dies ~10 s later.
+So the image path breaks at record start before any sensor mode change is even requested -- in the step
+that reconfigures the image pipeline for the recording entry, which reads the entry (its mode 230) and
+works with 161. None of the per-mode lookups (cmpprobe), inline scans (wideprobe) or compares saw 230 there.
