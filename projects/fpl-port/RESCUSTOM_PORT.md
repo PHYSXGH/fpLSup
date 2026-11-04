@@ -410,3 +410,7 @@ survive the crash. Results:
 Next suspect: the R10 value (descriptor +0x10 {value, mode} pairs; "FUN_c0320008 programs the readout
 with it"): the core returns the donor's value only when the donor has a pair, else the firmware's
 lookup falls back to pair 0 for an id it does not know -- a real id (3) finds its own pair.
+**R10 ruled out (r10check.py, camera):** the R10 table (0xC0B93BCC, 85 pairs) has a pair for every real
+mode (161 -> 2, 3 -> 1, ...); the core answers its virtual mode itself with the donor's value (R10OK 1,
+R10 2). No fallback to pair 0. ImagerMode / ImagerShoot (0xC0319050..) reach the per-mode data through
+the hooked lookups as well. Still open: what keys on the id number itself.
