@@ -20,14 +20,15 @@ sys.path.insert(0, str(F.ROOT / 'fpSup/fp_usb_shell/v3'))
 import test_v3 as T                                             # noqa: E402
 import nbu_format as _N                                         # noqa: E402
 
-GUI_OBJECT, NBR_LOAD, SITE = 0xC37B7048, 0xC05E84D8, 0xC056461C
+from fwtarget import fw                                         # noqa: E402 (the fp's addresses, mapped)
+GUI_OBJECT, NBR_LOAD, SITE = fw(0xC37B7048), fw(0xC05E84D8), fw(0xC056461C)
 FAKE = 0xC3F00000                       # the fake UI app and its vectors
 APP, SCREENS, SCREEN0, READER, MACHS, NAMES, NEW_RD = (FAKE + o for o in (
     0x0, 0x1000, 0x2000, 0x3000, 0x4000, 0x5000, 0x6000))
 STOCK_MACHINES = 17
 _img, _base, _rows, (POOL_AT, POOL_LEN) = _N.load_sets()
 VAR_REGISTER, VAR_SUBSCRIBE, POST_INT, POST_STR, F_RENAME = (
-    0xC05DB308, 0xC0560FB0, 0xC0593F30, 0xC0593FE0, 0xC0366508)
+    fw(0xC05DB308), fw(0xC0560FB0), fw(0xC0593F30), fw(0xC0593FE0), fw(0xC0366508))
 
 
 class Cam(T.Camera):
@@ -49,7 +50,7 @@ class Cam(T.Camera):
         self.put(READER + 0x08, APP)
         self.put(READER + 0x10, POOL_LEN)
         self.put(READER + 0x14, POOL_AT)
-        self.put(READER + 0x24, 0xC18C0460)
+        self.put(READER + 0x24, fw(0xC18C0460))
         self.put(APP + 0xF8, STOCK_MACHINES)
         self.put(APP + 0xFC, machine_capacity)
         self.put(APP + 0x104, MACHS)

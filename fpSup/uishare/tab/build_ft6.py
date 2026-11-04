@@ -25,6 +25,20 @@ sys.path[:0] = [str(ROOT / 'projects/open-gate/build'), str(ROOT / 'fpSup/fp_usb
 import nbr as NBR                 # noqa: E402
 import sl_pages as SL             # noqa: E402
 import build_v3 as B              # noqa: E402
+import fwtarget                   # noqa: E402
+
+
+def camera_image(name='MAIN_c0000000.bin'):
+    """The firmware image of the camera FPSUP_CAMERA names (out/ for the fp,
+    out_fpl/ for the fp L).  The fp L's UI resource sets and string pool are
+    the fp's byte for byte, moved +0xFD40 (projects/fpl-port/LOADER_V4.md)."""
+    t = fwtarget.target()
+    return (ROOT / ('out' if t == 'fp' else f'out_{t}') / name).read_bytes()
+
+
+def stock_nbr():
+    import nbr_stock
+    return nbr_stock.StockNbr(camera_image('seg0_c0000000.bin'), container=fwtarget.fw(nbr_stock.CONTAINER))
 
 PAGE = 'FT_Y6'
 BASE = 'MainY5'
@@ -101,9 +115,7 @@ def native_english_texts():
     Custom Sup concepts retain their own labels instead of unrelated camera
     firmware-update/format confirmations.
     """
-    import nbr_stock
-    nbr = nbr_stock.StockNbr((ROOT / 'out/seg0_c0000000.bin').read_bytes())
-    return nbr.strings('English')
+    return stock_nbr().strings('English')
 
 
 NATIVE_ENGLISH = native_english_texts()
@@ -182,10 +194,10 @@ def data_file() -> tuple[bytes, dict]:
     import manage_page as MP
     import manager_logo
     from ui import fpui
-    img = (ROOT / 'out/MAIN_c0000000.bin').read_bytes()
+    img = camera_image()
     if SL.gui_id(img, BASE) != GUI_ID:
         raise SystemExit(f'{BASE} GUI id is not {GUI_ID}')
-    stock = [struct.unpack('<I', B.stock(a, 4, img))[0] for a in (0xC056461C,) + STRING_SITES]
+    stock = [struct.unpack('<I', B.stock(fwtarget.fw(a), 4, img))[0] for a in (0xC056461C,) + STRING_SITES]
     if stock[0] != 0xEB000005:
         raise SystemExit('0xC056461C is not the stock bl FUN_c0564638')
     _img, pool = FP.stock_pool()

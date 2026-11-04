@@ -268,8 +268,13 @@ def tally(records: list[Record]) -> dict:
 
 def _paths():
     from pathlib import Path
+    import os
     here = Path(__file__).resolve().parent           # research/ui/tools/nbu_probe
-    return here.parents[1] / "nbu_sets.json", here.parents[3] / "out" / "seg0_c0000000.bin"
+    cam = os.environ.get("FPSUP_CAMERA", "fp").strip().lower() or "fp"
+    if cam == "fp":
+        return here.parents[1] / "nbu_sets.json", here.parents[3] / "out" / "seg0_c0000000.bin"
+    # another camera (projects/fpl-port): its own index, from its own image
+    return here.parents[1] / f"nbu_sets_{cam}.json", here.parents[3] / f"out_{cam}" / "seg0_c0000000.bin"
 
 
 def load_sets():

@@ -282,7 +282,7 @@ def check_page(page, pool, img):
 if __name__ == "__main__":
     import imx410_plan as PL
     PL.WITH_SL_EXCL, PL.WITH_RATE_ROW, PL.WITH_BIT_ROW = True, False, False
-    img = (P.ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = (P.ROOT / P._OUT / "MAIN_c0000000.bin").read_bytes()
     pool = P.Pool(img[P.U.POOL_START - P.B:P.U.POOL_START - P.B + P.U.POOL_SIZE])
     refs = []
     seq = build_wh_page(img, pool, refs)

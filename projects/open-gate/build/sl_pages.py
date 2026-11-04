@@ -40,11 +40,20 @@ import nbr as NBR             # noqa: E402
 import nbu_format as N        # noqa: E402
 
 B = 0xC0000000
+try:            # the camera FPSUP_CAMERA names: fp addresses mapped (fp_usb_shell/fwtarget.py)
+    from fwtarget import fw as _fw, target as _target
+except ImportError:                                     # pragma: no cover
+    def _fw(a):
+        return a
+
+    def _target():
+        return 'fp'
+_OUT = 'out' if _target() == 'fp' else 'out_' + _target()     # out/ for the fp, out_fpl/ for the fp L
 VERSION = 0x01090000
 ROW_TAIL = (0, 0, 1024, 682)                # every stock index row
 INDEX_NAME = "sl_pages"
 END = struct.pack(">II", 0xFFFFFFFF, 8)
-B25_SET = (0xC1A5C590, 0xC1A792FB)          # imx410_rate_ui.SET_START / SET_END (stock bytes)
+B25_SET = (_fw(0xC1A5C590), _fw(0xC1A792FB))          # imx410_rate_ui.SET_START / SET_END (stock bytes)
 
 
 def stock_b25(img: bytes) -> bytes:
@@ -170,7 +179,7 @@ def native_rows(pack: bytes):
 
 # GUI page tables (FUN_c0564638 picks by the name's first letter): 0-terminated
 # {char *name, u32 id}.  B2_5 = 36 (UicGuiMenuMovieRecord).
-GUI_TABLES = {"B": 0xC0D0DFC8, "M": 0xC0D0DB68}
+GUI_TABLES = {"B": _fw(0xC0D0DFC8), "M": _fw(0xC0D0DB68)}
 PRIVATE_PREFIX = "SL_"
 
 
@@ -313,15 +322,15 @@ def inspect_pack(pack: bytes) -> dict:
     return out
 
 
-SM_CODE = ((0xC05D9B00, 0xC05D9E80, "UI helpers"), (0xC05ECC00, 0xC05ED600, "state machine"),
-           (0xC0013000, 0xC0016000, "libc"), (0xC05E8F00, 0xC05EA000, "strings / dictionary"))
+SM_CODE = ((_fw(0xC05D9B00), _fw(0xC05D9E80), "UI helpers"), (_fw(0xC05ECC00), _fw(0xC05ED600), "state machine"),
+           (_fw(0xC0013000), _fw(0xC0016000), "libc"), (_fw(0xC05E8F00), _fw(0xC05EA000), "strings / dictionary"))
 
 
 def native_index(pack: bytes, img: bytes | None = None):
     """Run the original interpreter over the pack's top level (pool, index, end)
     and return [(name, offset)] as case 0 built them (ctx 0x2A / 0x2B rows)."""
     import nbu_probe as P
-    img = img if img is not None else (ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = img if img is not None else (ROOT / _OUT / "MAIN_c0000000.bin").read_bytes()
     probe = P.NbuProbe(img[:P.SEG0_SIZE])
     probe.install_arena()
     probe.survey = True            # every other native call recorded and returned 0, as for stock's index
@@ -349,7 +358,7 @@ def native_switch(pack: bytes, queries, img: bytes | None = None) -> dict:
     really executes) -- then ask the stock matcher what each (current screen,
     request) leads to: {(cur, req): (target state, its type) or None}."""
     import nbu_probe as P
-    img = img if img is not None else (ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = img if img is not None else (ROOT / _OUT / "MAIN_c0000000.bin").read_bytes()
     blob_max = max(P.NbuProbe.BLOB_MAX, (len(pack)+0xFFFF)&~0xFFFF)
     class PackProbe(P.NbuProbe):
         BLOB_MAX = blob_max
@@ -373,10 +382,10 @@ def native_switch(pack: bytes, queries, img: bytes | None = None) -> dict:
         probe.write(scratch, cur.encode() + b"\0")
         probe.write(scratch + 0x40, req.encode() + b"\0")
         probe.write_words(scratch + 0x80, 0)
-        state = probe._call(0xC05ECF10, sm, scratch)               # state by screen name
+        state = probe._call(_fw(0xC05ECF10), sm, scratch)               # state by screen name
         hit = None
         if state:
-            probe._call(0xC05ECCE0, state, scratch + 0x40, scratch + 0x80)
+            probe._call(_fw(0xC05ECCE0), state, scratch + 0x40, scratch + 0x80)
             t = probe.words(scratch + 0x80)[0]
             if t:
                 to = probe.words(t + 4)[0]
@@ -386,7 +395,7 @@ def native_switch(pack: bytes, queries, img: bytes | None = None) -> dict:
 
 
 if __name__ == "__main__":
-    img = (ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = (ROOT / _OUT / "MAIN_c0000000.bin").read_bytes()
     pack = build_pack(test_pages(img))
     print(len(pack), "bytes", {k: len(v) for k, v in inspect_pack(pack).items()})
     print("native", native_index(pack, img))

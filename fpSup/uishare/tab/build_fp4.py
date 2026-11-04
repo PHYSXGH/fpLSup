@@ -132,7 +132,7 @@ def home_file():
     import ft6_page as FP
     import home4_page as H
     import manager_logo
-    img = (FT.ROOT / 'out/MAIN_c0000000.bin').read_bytes()
+    img = FT.camera_image()
     if SL.gui_id(img, FT.BASE) != FT.GUI_ID:
         raise SystemExit(f'{FT.BASE} GUI id is not {FT.GUI_ID}')
     _img, pool = FP.stock_pool()
@@ -187,7 +187,7 @@ def supmgr_file():
     home page's (FPSUP.BIN registers them)."""
     import ft6_page as FP
     import manage_page as MP
-    img = (FT.ROOT / 'out/MAIN_c0000000.bin').read_bytes()
+    img = FT.camera_image()
     _img, pool = FP.stock_pool()
     page, refs, row0 = MP.build_manage(img, pool, v4=True)
     names = {n for _t, n in FT.variables() + supmgr_extra()}

@@ -29,13 +29,22 @@ sys.path.insert(0, str(ROOT / "research/ui/tools/nbu_probe"))
 import nbu_format as N
 
 BASE = 0xC0000000
-SET_START, SET_END = 0xC1A5C590, 0xC1A792FB
+try:            # the camera FPSUP_CAMERA names: the fp addresses below, mapped (fp_usb_shell/fwtarget.py)
+    from fwtarget import fw as _fw, target as _target
+except ImportError:                                     # pragma: no cover
+    def _fw(a):
+        return a
+
+    def _target():
+        return 'fp'
+_OUT = 'out' if _target() == 'fp' else 'out_' + _target()     # out/ for the fp, out_fpl/ for the fp L
+SET_START, SET_END = _fw(0xC1A5C590), _fw(0xC1A792FB)
 SET_SHA256 = "6e0d023dbacad3326f24bccca3dcbae58449a5cf07074546ccfa401a77d44080"
-POOL_START, POOL_SIZE = 0xC18C0474, 0x2B018
+POOL_START, POOL_SIZE = _fw(0xC18C0474), 0x2B018
 TEXT_PARENT, ICON_PARENT, BORROWED_ID = 4448, 4457, 4458
-TEXT_PARENT_RECORD, ICON_PARENT_RECORD = 0xC1A7638D, 0xC1A76E8A
-DONOR_START, DONOR_END = 0xC1A76E05, 0xC1A76E8A
-BORROW_START, BORROW_END = 0xC1A76EFA, 0xC1A7701A
+TEXT_PARENT_RECORD, ICON_PARENT_RECORD = _fw(0xC1A7638D), _fw(0xC1A76E8A)
+DONOR_START, DONOR_END = _fw(0xC1A76E05), _fw(0xC1A76E8A)
+BORROW_START, BORROW_END = _fw(0xC1A76EFA), _fw(0xC1A7701A)
 # Two controller floats (tag 0x1000E, BE) that r2 missed, found 2026-09-30 by
 # scanning every stock list in all 221 NBU sets:
 #   popup ListItem instance count = max(8, rows)  (B2_5_5 9->9, B6_2_1 11->11,
@@ -43,9 +52,9 @@ BORROW_START, BORROW_END = 0xC1A76EFA, 0xC1A7701A
 #   MenuItem_Select prop 0x12 = max(7, IconText children - 1)  (8->7, 9->8,
 #     11->10, 5->4); ten summary children need 9.0 or state 9 is clamped.
 # (record address, owner id, property, body offset, stock, new)
-CONTROLLERS = ((0xC1A7519D, 4440, 3, 28, 9.0, 10.0),    # ListItem: popup rows
-               (0xC1A73D43, 4434, 0x12, 24, 8.0, 9.0),  # MenuItem_Select: summary
-               (0xC1A744D5, 4438, 0x12, 24, 8.0, 9.0))  # IconChange: GUI var clamp
+CONTROLLERS = ((_fw(0xC1A7519D), 4440, 3, 28, 9.0, 10.0),    # ListItem: popup rows
+               (_fw(0xC1A73D43), 4434, 0x12, 24, 8.0, 9.0),  # MenuItem_Select: summary
+               (_fw(0xC1A744D5), 4438, 0x12, 24, 8.0, 9.0))  # IconChange: GUI var clamp
 # IconChange is the third frame-rate maximum (with List C1A74B44 and
 # MenuItem_Select).  Camera 2026-10-01 (r9 + RAM): the stock notifier writes
 # row 9 back into MV_FrameRate, IconChange clamped it to 8, and that write
@@ -56,13 +65,13 @@ CONTROLLERS = ((0xC1A7519D, 4440, 3, 28, 9.0, 10.0),    # ListItem: popup rows
 # Clone the v=8 pair as v=9 ("10" -> focus "9"), under a fresh key.  Space
 # comes from the last empty summary Icon (Icon08), whose drawImage and
 # animationClip capacities move to the two new event classes.
-LIST_ID, LIST_RECORD = 4439, 0xC1A7498B
+LIST_ID, LIST_RECORD = 4439, _fw(0xC1A7498B)
 # False = popup row ten only (cursor pair + ListItem), no collapsed-summary
 # label: the 240-freeze bisection needs the two halves separable.
 WITH_SUMMARY = True
-LAST_EVENT, LAST_FOCUS = 0xC1A75020, 0xC1A7504C
+LAST_EVENT, LAST_FOCUS = _fw(0xC1A75020), _fw(0xC1A7504C)
 PAIR_KEY, EVENT_NAME, FOCUS_NAME = 0x14, 0x21C0, 0x5B7C   # pool "10", "9"
-DROP_ID, DROP_START, DROP_END = 4465, 0xC1A776F2, 0xC1A77816
+DROP_ID, DROP_START, DROP_END = 4465, _fw(0xC1A776F2), _fw(0xC1A77816)
 
 
 def _put(data: bytes, offset: int, value: int) -> bytes:
@@ -226,7 +235,7 @@ def patches(image: bytes) -> list[tuple[int, int, str]]:
 def _native_stock_services():
     """The stock stream defines the fixed construction-call allow-list."""
     import nbu_probe as P
-    stock = P.load_firmware(ROOT / 'out/seg0_c0000000.bin')
+    stock = P.load_firmware(ROOT / _OUT / 'seg0_c0000000.bin')
     baseline = P.NbuProbe(stock)
     baseline.install_arena()
     baseline.map_set('B2_5')
@@ -265,21 +274,21 @@ def _verify_summary_selector(probe, children):
             raise ValueError('invalid native child visibility request')
         visible[ids[args[0]]] = args[1]
         return 0
-    probe.stub(0xC05D7148, 'toggleVisible component state', handler=point_state)
-    probe.stub(0xC05D70E8, 'toggleVisible owner', handler=point_owner)
-    probe.stub(0xC0600EA8, 'toggleVisible owner object', ret=owner)
-    probe.stub(0xC05D1ED0, 'parsed child count', handler=count)
-    probe.stub(0xC05D1EE8, 'parsed child at index', handler=child)
-    probe.stub(0xC05DAEC8, 'owner active', ret=0)
-    probe.stub(0xC05D02C8, 'set child visibility', handler=show)
-    probe.allow(0xC05FB680, 0xC05FB6F8, 'stock toggleVisible select-value setter')
-    probe.allow(0xC05FB548, 0xC05FB5B8, 'stock toggleVisible child visibility loop')
+    probe.stub(_fw(0xC05D7148), 'toggleVisible component state', handler=point_state)
+    probe.stub(_fw(0xC05D70E8), 'toggleVisible owner', handler=point_owner)
+    probe.stub(_fw(0xC0600EA8), 'toggleVisible owner object', ret=owner)
+    probe.stub(_fw(0xC05D1ED0), 'parsed child count', handler=count)
+    probe.stub(_fw(0xC05D1EE8), 'parsed child at index', handler=child)
+    probe.stub(_fw(0xC05DAEC8), 'owner active', ret=0)
+    probe.stub(_fw(0xC05D02C8), 'set child visibility', handler=show)
+    probe.allow(_fw(0xC05FB680), _fw(0xC05FB6F8), 'stock toggleVisible select-value setter')
+    probe.allow(_fw(0xC05FB548), _fw(0xC05FB5B8), 'stock toggleVisible child visibility loop')
     probe.uc.reg_write(UC_ARM_REG_S0, struct.unpack('<I', struct.pack('<f', 9.0))[0])
-    if probe._call(0xC05FB680, component) != 0:
+    if probe._call(_fw(0xC05FB680), component) != 0:
         raise ValueError('native summary select-value setter failed')
     if probe.words(state+0x2C)[0] != 9:
         raise ValueError('native summary index was clamped below the tenth child')
-    if probe._call(0xC05FB548, component) != 0:
+    if probe._call(_fw(0xC05FB548), component) != 0:
         raise ValueError('native summary visibility update failed')
     if visible != {oid: int(oid == BORROWED_ID) for oid in children}:
         raise ValueError('native summary did not select only the 240 text child')

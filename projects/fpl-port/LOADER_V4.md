@@ -92,3 +92,45 @@ power-off write-back restored them. Loader v4 (core, SupManager, shell) works on
 
 Still to do in phase 1: the fpSup page (`--ui`, needs `out/seg0_c0000000.bin` for its builder), the
 splash and Fast Start options on this loader.
+
+## Card r3: four-box splash, Fast Start 2 and 3 (2026-11-03)
+
+`cards/20261103-loader-v4-r3-fast` (`build_v4.py --card --no-ui`): AutoRun `1c8794ce…`, LOADER `db3f7834…`, SUPMGR
+and shell as r2, `fpSup\UI\0..4.BIN` (the splash). With the user's OK to use the settings store.
+
+On the camera: cold boot (battery pull) about 10 s with the four boxes; power-switch restart almost instant.
+LOAD.LOG of the fast restart:
+
+```
+01 0011C54D           START (boot id: the loader starts ~1.2 s in, against ~2.9 s on the normal path)
+11 00000002           LISTED
+0A C52D4A00 0 SUPMGR.BIN           LOADED (cached alias)
+0A 452D7100 4 USB-Shell_v3.4.0.BIN LOADED, 4 patches
+0E 2 2                DONE
+```
+
+No REPAIRED: the power-off write-back and the fast path both leave the firmware clean.
+
+## The fpSup page (`--ui`), 2026-11-04
+
+The page builders read the camera's own UI resources. On the fp L those are the fp's byte for byte:
+**one 34.4 MB block, 0xC0D223E9 … 0xC2DEAB88 (the stock NBR container, the NBU UI container, all 221
+resource sets, the string pool), identical at +0xFD40**. Added as one `range` row. The UI code moved −0x3E20
+(per-address rows, bytes checked), the property descriptor tables +0xFC50 (pointer tables: every field
+name checked by the builder), and the two GUI page tables (60 and 13 entries, same names and ids, MainY5 =
+21) are checked rows.
+
+Made camera-aware (image, index and addresses from FPSUP_CAMERA):
+- `research/ui/tools/nbu_probe` (the emulator index tool; pinned to each camera's image) and `nbr_stock.py`;
+  the fp L index is `research/ui/nbu_sets_fpl.json` (221 of 221 sets, pool 0x2B018 bytes at 0xC18D01B4);
+- `fpSup/uishare/tab` (`build_ft6`, `build_fp4`, `manager_logo`), `projects/open-gate/build` (`sl_pages`,
+  `sl_b25_page`, `sl_size_page`, `sl_wh_page`, `imx410_rate_ui`), `fpSup/lossless/menu/build_menu_candidate`;
+- tests: `uishare/tab` 18/18 and `loader-v4/test_ui_v4` 38/38 on both cameras (through the camera's own UI
+  interpreter and state-machine matcher on the fp L image); `nbu_probe` 43/43 on the fp.
+
+The page files (`UI\FPSUP.BIN` `968f9eb7…`, `UI\SUPMGR.BIN` `2fbeabc1…`) come out the same for both cameras, as
+the identical UI data predicts; the core differs (its page hooks are at fp L addresses). Environment: the
+image is also linked as `out*/seg0_c0000000.bin`; Pillow and lz4 in `projects/fpl-port/.venv`.
+
+**Card r4** `cards/20261104-loader-v4-r4-page` (`build_v4.py --card`): r3 plus the page. AutoRun identical
+to r3's (`1c8794ce…`), LOADER `07628179…`, `UI\FPSUP.BIN`, `UI\SUPMGR.BIN`. The page: SYSTEM menu, page 6.

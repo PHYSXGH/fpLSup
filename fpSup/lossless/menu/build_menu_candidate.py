@@ -25,6 +25,12 @@ OWNER_OFFSETS = {0x10004: 20, 0x10005: 20, 0x10006: 24,
                  0x10009: 20, 0x1000A: 20, 0x1000E: 20}
 MASK_OFFSETS = {0x10004: 28, 0x10005: 28, 0x10006: 32,
                 0x10009: 32, 0x1000E: 28}
+try:            # the camera FPSUP_CAMERA names: the tables below are the fp's addresses
+    from fwtarget import fw as _fw
+except ImportError:                                     # pragma: no cover
+    def _fw(a):
+        return a
+
 DESCRIPTORS = {
     "objectBase": (0xC2DFF5F4, ["position", "size", "angle", "scale", "transform-origin", "opacity",
                                "is-visible", "do-clip", "tab-index", "is-tab-group", "tab-group-focus-rule",
@@ -238,7 +244,7 @@ def load_property_schemas(source):
     for component, (address, names) in DESCRIPTORS.items():
         fields = []
         for index, expected in enumerate(names):
-            kind, pointer, default = struct.unpack_from("<III", source, address - 0xC0000000 + index * 12)
+            kind, pointer, default = struct.unpack_from("<III", source, _fw(address) - 0xC0000000 + index * 12)
             offset = pointer - 0xC0000000
             check(0 <= offset < len(source), "descriptor name pointer outside seg0")
             end = source.find(b"\0", offset)
@@ -251,7 +257,7 @@ def load_property_schemas(source):
             # FUN_c05d5670 resolves these final two fields for drawable type 4.
             # C05D5E30 adds two to the constructor's declared property count.
             for address, expected, expected_kind in ((0xC2DFFC00, "rect", 5), (0xC2DFFBF4, "layout", 10)):
-                kind, pointer, default = struct.unpack_from("<III", source, address - 0xC0000000)
+                kind, pointer, default = struct.unpack_from("<III", source, _fw(address) - 0xC0000000)
                 offset = pointer - 0xC0000000
                 check(0 <= offset < len(source), "drawable common descriptor pointer outside seg0")
                 end = source.find(b"\0", offset)

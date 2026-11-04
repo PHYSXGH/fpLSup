@@ -56,6 +56,7 @@ CONTAINER = 0xC0D22400
 MAGIC = b"NBR\x00"
 ENTRY = 16
 SEG0_SIZE = 49_245_696
+SEG0_SIZES = {49_245_696: "fp Ver.5.02", 49_310_208: "fp L Ver.3.02"}   # the two pinned images
 
 
 class NbrError(RuntimeError):
@@ -92,8 +93,8 @@ class StockNbr:
     """Read-only view of the NBR container inside a firmware image."""
 
     def __init__(self, image: bytes, container: int = CONTAINER) -> None:
-        if len(image) != SEG0_SIZE:
-            raise NbrError(f"expected the pinned {SEG0_SIZE}-byte seg0 image")
+        if len(image) not in SEG0_SIZES:
+            raise NbrError(f"expected a pinned seg0 image ({', '.join(map(str, SEG0_SIZES))} bytes)")
         self.image = image
         self.container = container
         if self._bytes(container, 4) != MAGIC:

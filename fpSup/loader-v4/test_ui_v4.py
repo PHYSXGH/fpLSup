@@ -20,7 +20,8 @@ import build_v4 as B                                           # noqa: E402
 
 UI_PATH = '\\fpSup\\UI\\' + B.UI_FILE
 SM_PATH = '\\fpSup\\UI\\SUPMGR.BIN'
-SCREENS = 0xC054DD38                     # fpsup_ui.c SCREENS: the screen manager getter
+from fwtarget import fw                                        # noqa: E402 (the fp's addresses, mapped)
+SCREENS = fw(0xC054DD38)                 # fpsup_ui.c SCREENS: the screen manager getter
 MGR = F6.FAKE + 0x7A00                   # a fake manager: vt at +0, vt+0x48 = SHOW
 SHOW = F6.FAKE + 0x7C00
 L_UI = 0x32
@@ -275,7 +276,7 @@ class HomePageTests(unittest.TestCase):
     def test_power_off_restores_the_sites(self):
         cam = boot(('A.BIN', ts('AAAA', [(TOGGLE, 'Flip')])))
         img = T.T3.IMAGE.read_bytes()
-        sites = [0xC056461C, 0xC05E5B58, 0xC05E61C8, 0xC05E61E0]
+        sites = [fw(0xC056461C), fw(0xC05E5B58), fw(0xC05E61C8), fw(0xC05E61E0)]
         stock = [struct.unpack_from('<I', img, a - 0xC0000000)[0] for a in sites]
         self.assertNotEqual(cam.w(sites[0]), stock[0])
         cam.power_off()
@@ -285,7 +286,7 @@ class HomePageTests(unittest.TestCase):
         # v3 uishare claims the string sites SHARED_UI; under v4 they are the
         # core's alone, so such a sup must not load half-working
         img = T.T3.IMAGE.read_bytes()
-        for site in (0xC05E5B58, 0xC05E61C8, 0xC05E61E0):
+        for site in (fw(0xC05E5B58), fw(0xC05E61C8), fw(0xC05E61E0)):
             stock = struct.unpack_from('<I', img, site - 0xC0000000)[0]
             cam = boot(('A.BIN', B.test_sup(T.cfg(claims=[(site, stock, 3, 0)], rows=[(TOGGLE, 'Flip')]), 'AAAA')))
             log = cam.loadlog()
@@ -321,7 +322,7 @@ class HomePageTests(unittest.TestCase):
             # the id is the string's own address, at the uncached alias: no table
             self.assertEqual(sid + 0x80000000, base + struct.unpack_from('<I', data, strs_off + 4 * k)[0])
             self.assertTrue(0x40000000 <= sid < 0x80000000, hex(sid))
-            got = self.site(cam, 0xC05E5B58, reader, sid)
+            got = self.site(cam, fw(0xC05E5B58), reader, sid)
             self.assertEqual(got, sid + 0x80000000)                     # the cached alias
             self.assertEqual(cam.cstr(got), names[k])
 
@@ -333,25 +334,25 @@ class HomePageTests(unittest.TestCase):
 
     def test_stock_lookups_keep_the_firmware_rule(self):
         cam, reader, pool = self.strings_cam()
-        self.assertEqual(self.site(cam, 0xC05E5B58, reader, 8), pool + 8)
-        self.assertEqual(self.site(cam, 0xC05E5B58, reader, 16), 0)            # past the pool
-        self.assertEqual(self.site(cam, 0xC05E5B58, reader, 0xFFFFFFFF), 0)
-        self.assertEqual(self.site(cam, 0xC05E5B58, reader, 0x3FFFFFFF), 0)    # below the id range: stock's 0
-        self.assertEqual(self.site(cam, 0xC05E5B58, reader, 0x80000000), 0)    # above it, too
-        self.assertEqual(self.site(cam, 0xC05E5B58, reader, 0x90000000), 0)
-        self.assertEqual(self.site(cam, 0xC05E61C8, reader, pool), 1)           # the pool's first byte
-        self.assertEqual(self.site(cam, 0xC05E61C8, reader, pool + 3), 1)
-        self.assertEqual(self.site(cam, 0xC05E61C8, reader, pool + 16), 0)
-        self.assertEqual(self.site(cam, 0xC05E61C8, reader, pool - 1), 0)
-        self.assertEqual(self.site(cam, 0xC05E61E0, reader, pool + 3), 13)
+        self.assertEqual(self.site(cam, fw(0xC05E5B58), reader, 8), pool + 8)
+        self.assertEqual(self.site(cam, fw(0xC05E5B58), reader, 16), 0)            # past the pool
+        self.assertEqual(self.site(cam, fw(0xC05E5B58), reader, 0xFFFFFFFF), 0)
+        self.assertEqual(self.site(cam, fw(0xC05E5B58), reader, 0x3FFFFFFF), 0)    # below the id range: stock's 0
+        self.assertEqual(self.site(cam, fw(0xC05E5B58), reader, 0x80000000), 0)    # above it, too
+        self.assertEqual(self.site(cam, fw(0xC05E5B58), reader, 0x90000000), 0)
+        self.assertEqual(self.site(cam, fw(0xC05E61C8), reader, pool), 1)           # the pool's first byte
+        self.assertEqual(self.site(cam, fw(0xC05E61C8), reader, pool + 3), 1)
+        self.assertEqual(self.site(cam, fw(0xC05E61C8), reader, pool + 16), 0)
+        self.assertEqual(self.site(cam, fw(0xC05E61C8), reader, pool - 1), 0)
+        self.assertEqual(self.site(cam, fw(0xC05E61E0), reader, pool + 3), 13)
 
     def test_our_pointers_are_borrowed(self):
         cam, reader, pool = self.strings_cam()
         data = built()['data']
         base = self.loaded(cam, data)
         p = base + struct.unpack_from('<I', data, struct.unpack_from('<17I', data)[3])[0]   # string 0
-        self.assertEqual(self.site(cam, 0xC05E61C8, reader, p), 1)              # owns: never freed
-        rest = self.site(cam, 0xC05E61E0, reader, p)
+        self.assertEqual(self.site(cam, fw(0xC05E61C8), reader, p), 1)              # owns: never freed
+        rest = self.site(cam, fw(0xC05E61E0), reader, p)
         self.assertGreater(rest, len(cam.cstr(p)))                               # realloc copies inside
         self.assertGreaterEqual(p, T.HEAP + T.ALIAS)                            # the cached alias
 
@@ -361,7 +362,7 @@ class HomePageTests(unittest.TestCase):
         cam, reader, pool = self.strings_cam()
         p = self.loaded(cam, built()['data']) + 100
         from unicorn.arm_const import UC_ARM_REG_R3, UC_ARM_REG_R12, UC_ARM_REG_R4
-        for site, want in ((0xC05E61C8, 1), (0xC05E61E0, None)):
+        for site, want in ((fw(0xC05E61C8), 1), (fw(0xC05E61E0), None)):
             for sp in (T.T3.STACK - 0x1004, T.T3.STACK - 0x1008):   # 4 and 0 mod 8
                 cam.mu.reg_write(UC_ARM_REG_R3, 0x33333333)
                 cam.mu.reg_write(UC_ARM_REG_R12, 0x12121212)
@@ -545,7 +546,7 @@ class SupManagerPageTests(unittest.TestCase):
         lo = T.HEAP + T.ALIAS + 0x1000
         reader = F6.FAKE + 0x7400
         cam.put(reader + 0x10, 16); cam.put(reader + 0x14, F6.FAKE + 0x7480)
-        own = lambda p: cam.call(0xC05E61C8, r0=reader, r1=p, thumb=True)[0]
+        own = lambda p: cam.call(fw(0xC05E61C8), r0=reader, r1=p, thumb=True)[0]
         self.assertEqual(own(lo + 8), 0)
         self.assertEqual(cam.callsvc('borrow', lo, lo + 0x40), 0)
         self.assertEqual((own(lo + 8), own(lo + 0x40)), (1, 0))

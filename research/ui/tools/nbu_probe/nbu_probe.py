@@ -41,57 +41,67 @@ from unicorn.arm_const import (UC_ARM_REG_C1_C0_2, UC_ARM_REG_FPEXC, UC_ARM_REG_
                                UC_ARM_REG_PC, UC_ARM_REG_R0, UC_ARM_REG_R1,
                                UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_SP)
 
-BASE = 0xC0000000
-SEG0_SIZE = 49_245_696
-SEG0_SHA256 = "aaa5208a028d9c4aebb9cc8614add723d456e96b2a95914f433079954320e622"
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "fpSup" / "fp_usb_shell"))
+import fwtarget as _fwt                                         # noqa: E402
 
-INTERPRETER = (0xC05E6400, 0xC05E7B28)
-CTX_CTOR = 0xC05E5FE0
-CTX_CTOR_BASE = 0xC05E5F20
-PROLOGUE = 0xC05E63E8
-READ_BYTE = 0xC05E5D78
-READ_WORD = 0xC05E5DB8
-READ_BYTES = 0xC05E5E38
-SKIP = 0xC05E5EA8
-READ_FLOAT = 0xC05E5E20
-POOL_STRING = 0xC05E5B58
-STRCMP = 0xC0013E2C
-DTOR_MARKER = 0xC05E6029          # what the stock caller writes to ctx+0x44
+# The camera FPSUP_CAMERA names (default fp).  Addresses below are the fp's;
+# _fw() maps them through fp_usb_shell/cameras/*.tsv.  The image and its pin are
+# that camera's: the fp's seg0, or the fp L's (out_fpl/, projects/fpl-port).
+_fw = _fwt.fw
+CAMERA = _fwt.target()
+BASE = 0xC0000000
+_PINS = {"fp": (49_245_696, "aaa5208a028d9c4aebb9cc8614add723d456e96b2a95914f433079954320e622"),
+         "fpl": (49_310_208, "fb8c20968e01ff9d8edf5f3e3f681c7341958048a004e717092c75e11106d4b9")}
+SEG0_SIZE, SEG0_SHA256 = _PINS[CAMERA]
+
+INTERPRETER = (_fw(0xC05E6400), _fw(0xC05E7B28))
+CTX_CTOR = _fw(0xC05E5FE0)
+CTX_CTOR_BASE = _fw(0xC05E5F20)
+PROLOGUE = _fw(0xC05E63E8)
+READ_BYTE = _fw(0xC05E5D78)
+READ_WORD = _fw(0xC05E5DB8)
+READ_BYTES = _fw(0xC05E5E38)
+SKIP = _fw(0xC05E5EA8)
+READ_FLOAT = _fw(0xC05E5E20)
+POOL_STRING = _fw(0xC05E5B58)
+STRCMP = _fw(0xC0013E2C)
+DTOR_MARKER = _fw(0xC05E6029)          # what the stock caller writes to ctx+0x44
 
 # Original instructions we are content to execute as they are.  Each range is a
 # whole function; nothing here writes outside the context or reads I/O.
 REAL = {
     "interpreter": INTERPRETER,
-    "ctx_ctor": (CTX_CTOR, 0xC05E600A),
-    "ctx_ctor_base": (CTX_CTOR_BASE, 0xC05E5FB0),
-    "prologue": (PROLOGUE, 0xC05E6400),
-    "read_byte": (READ_BYTE, 0xC05E5D86),
-    "read_word": (READ_WORD, 0xC05E5DDE),
-    "read_bytes": (READ_BYTES, 0xC05E5E80),
-    "skip": (SKIP, 0xC05E5EB0),
-    "read_float": (READ_FLOAT, 0xC05E5E32),
-    "pool_string": (POOL_STRING, 0xC05E5B6C),
-    "strcmp": (STRCMP, 0xC0013F00),
+    "ctx_ctor": (CTX_CTOR, _fw(0xC05E600A)),
+    "ctx_ctor_base": (CTX_CTOR_BASE, _fw(0xC05E5FB0)),
+    "prologue": (PROLOGUE, _fw(0xC05E6400)),
+    "read_byte": (READ_BYTE, _fw(0xC05E5D86)),
+    "read_word": (READ_WORD, _fw(0xC05E5DDE)),
+    "read_bytes": (READ_BYTES, _fw(0xC05E5E80)),
+    "skip": (SKIP, _fw(0xC05E5EB0)),
+    "read_float": (READ_FLOAT, _fw(0xC05E5E32)),
+    "pool_string": (POOL_STRING, _fw(0xC05E5B6C)),
+    "strcmp": (STRCMP, _fw(0xC0013F00)),
 }
 
 NAMES = {
-    0xC05E8EF8: "alloc_from_context",
-    0xC05E5B58: "pool_string",
-    0xC05EDC40: "element_new",
-    0xC05EDB68: "element_set_name",
-    0xC05EDB10: "element_release",
-    0xC05EDD20: "element_set_keys",
-    0xC05E2988: "image_container_new",
-    0xC05E2CA8: "container_append",
-    0xC05DB308: "var_registry_register",
-    0xC05DB198: "var_registry_init",
-    0xC05D9EB0: "get_var_registry",
-    0xC05DFE88: "find_resource",
-    0xC05D8618: "resource_new",
-    0xC05D87C8: "resource_add_field",
-    0xC05D8A90: "resource_finish",
-    0xC05E7B60: "reader_seek",
-    0xC05E7B28: "reader_skip",
+    _fw(0xC05E8EF8): "alloc_from_context",
+    _fw(0xC05E5B58): "pool_string",
+    _fw(0xC05EDC40): "element_new",
+    _fw(0xC05EDB68): "element_set_name",
+    _fw(0xC05EDB10): "element_release",
+    _fw(0xC05EDD20): "element_set_keys",
+    _fw(0xC05E2988): "image_container_new",
+    _fw(0xC05E2CA8): "container_append",
+    _fw(0xC05DB308): "var_registry_register",
+    _fw(0xC05DB198): "var_registry_init",
+    _fw(0xC05D9EB0): "get_var_registry",
+    _fw(0xC05DFE88): "find_resource",
+    _fw(0xC05D8618): "resource_new",
+    _fw(0xC05D87C8): "resource_add_field",
+    _fw(0xC05D8A90): "resource_finish",
+    _fw(0xC05E7B60): "reader_seek",
+    _fw(0xC05E7B28): "reader_skip",
 }
 
 
@@ -315,7 +325,7 @@ class NbuProbe:
                                   probe.REALLOC | 1)
                 probe.write_words(pointer + 0x34, 0xA5E4A5E4)
             return pointer
-        self.stub(0xC05E8EF8, "alloc_from_context", handler=arena)
+        self.stub(_fw(0xC05E8EF8), "alloc_from_context", handler=arena)
 
     def _return(self, value: int) -> None:
         self.uc.reg_write(UC_ARM_REG_R0, value & 0xFFFFFFFF)
@@ -402,7 +412,7 @@ class NbuProbe:
             raise ProbeError("the call did not restore SP")
         return self.uc.reg_read(UC_ARM_REG_R0)
 
-    NBU_BASE = 0xC18C0460
+    NBU_BASE = _fw(0xC18C0460)
     NBU_SIZE = 0x1500000          # covers the whole record area from the base
 
     def index(self) -> list:
@@ -431,7 +441,7 @@ class NbuProbe:
         self._index = rows
         return rows
 
-    OBJECT_FACTORY = (0xC05CF808, 0xC05CF9E8)
+    OBJECT_FACTORY = (_fw(0xC05CF808), _fw(0xC05CF9E8))
 
     def map_set(self, name: str, limit: int = 8000) -> list:
         """Walk a whole resource set and return every record's exact extent.
@@ -600,7 +610,8 @@ class NbuProbe:
 # --- command line ---------------------------------------------------------
 
 def _default_image() -> Path:
-    return Path(__file__).resolve().parents[4] / "out" / "seg0_c0000000.bin"
+    out = "out" if CAMERA == "fp" else f"out_{CAMERA}"
+    return Path(__file__).resolve().parents[4] / out / "seg0_c0000000.bin"
 
 
 def build(image_path=None, survey: bool = False) -> "NbuProbe":

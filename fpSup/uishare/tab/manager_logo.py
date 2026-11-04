@@ -101,7 +101,8 @@ def images(legacy=False):
     the grey luminance themselves. The stock resources remain unchanged.
     """
     import nbr_stock
-    nbr = nbr_stock.StockNbr((ROOT / 'out/seg0_c0000000.bin').read_bytes())
+    import build_ft6
+    nbr = build_ft6.stock_nbr()
     out = list(layers(legacy))
     for k in range(1, 8):
         entries = [e for e in nbr.entries if e.path.endswith(f'/font_menu_MB_{k}.xci')]

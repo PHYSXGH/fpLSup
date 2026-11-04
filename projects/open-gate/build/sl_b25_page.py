@@ -34,6 +34,11 @@ import build_menu_candidate as BM           # noqa: E402
 import imx410_rate_ui as U                  # noqa: E402
 
 B = 0xC0000000
+try:            # out/ for the fp, out_fpl/ for the fp L (fp_usb_shell/fwtarget.py)
+    from fwtarget import target as _target
+    _OUT = 'out' if _target() == 'fp' else 'out_' + _target()
+except ImportError:                                     # pragma: no cover
+    _OUT = 'out'
 MENU, ROW = 89, 4433                       # Menu container; frame-rate row (B2_5_5)
 ROW_PITCH = 81.0
 # Per clone: y, and string renames (row-specific -> private).  Everything else
@@ -814,7 +819,7 @@ def base_page(img):
 
 
 def build(img=None):
-    img = img if img is not None else (ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = img if img is not None else (ROOT / _OUT / "MAIN_c0000000.bin").read_bytes()
     stock_pool = img[U.POOL_START - B:U.POOL_START - B + U.POOL_SIZE]
     pool = Pool(stock_pool)
     schemas = load_schemas(img)
@@ -1051,7 +1056,7 @@ def page_shape(page: bytes, pool) -> dict:
 
 def audit(res, img: bytes | None = None) -> dict:
     """Offline structure checks of a build() result against the r10 base page."""
-    img = img if img is not None else (ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = img if img is not None else (ROOT / _OUT / "MAIN_c0000000.bin").read_bytes()
     pool, page = res["pool"], res["page"]
     base = U.rebuild(img)
     base = base[:len(base) - (3 if U.WITH_SUMMARY else 0)]
@@ -1085,7 +1090,7 @@ def native_parse(page: bytes, pool: bytes, img: bytes | None = None):
     extended pool, record by record, under the same fixed construction allow-list
     imx410_rate_ui uses for the stock B2_5.  Returns the probe."""
     import nbu_probe as P
-    img = img if img is not None else (ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = img if img is not None else (ROOT / _OUT / "MAIN_c0000000.bin").read_bytes()
     # Sidebar pages have more native objects than a stock single-panel page.
     # Reserve disjoint, measured source/pool/heap regions inside synthetic RAM.
     blob_max = max(P.NbuProbe.BLOB_MAX, (len(page)+0xFFFF)&~0xFFFF)
@@ -1185,7 +1190,7 @@ def main(argv=None):
     ap.add_argument("--native", action="store_true", help="also run the original NBU interpreter")
     ap.add_argument("--pack", type=Path, help="write the SLMP block (for fpSup.BIN past 0xF000)")
     args = ap.parse_args(argv)
-    img = (ROOT / "out/MAIN_c0000000.bin").read_bytes()
+    img = (ROOT / _OUT / "MAIN_c0000000.bin").read_bytes()
     res = build(img)
     page = res["page"]
     print("page", len(page), "bytes (r10 B2_5", res["base_len"], "+ 2 x", res["donor_bytes"], ")")
