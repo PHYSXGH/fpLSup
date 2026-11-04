@@ -336,3 +336,6 @@
 0xc043a19c	0xc0439934	verify	res-custom canvas hook site: unique 13-instruction pattern match (branches/constants masked)
 0xc043a18c	0xc0439924	verify	res-custom vpro hook site: unique 13-instruction pattern match
 0xc0088c60	0xc00862d4	verify	res-custom save hook site: unique 9-instruction pattern match
+0xc0d02400	0xc0d12930	checked	the table angtv's movw/movt pair loads (fp C052DCFC/DD00 -> fp L C052A3B4/A3B8, the same code around it) (res-custom)
+0xc052dcfc	0xc052a3b4	checked	res-custom angtv hook site: the movw of that pair
+0xc043b6a4	0xc043b8e8	verify	res-custom mag hook site: the fp L loader of its second MAG4 copy (0xC0CBE16C), as the fp site loads the second

@@ -67,3 +67,31 @@ searched, and ogc_pick's `table == TAB1/2/3` test needs the fp L's tables. Next:
 generic lookup for the 8/10/12-bit recording tables, and those tables' entry layout.
 
 **angtv** still to read.
+
+## angtv and the picker's data (static, 2026-11-04)
+
+**angtv** (fp 0xC052DCFC): the hooked word is the `movw` of a `movw/movt r2` pair loading fp 0xC0D02400 = fp L
+**0xC0D12930** (site fp L 0xC052A3B4; the code around it is identical). The shim's replay writes the fp's
+low half as a bare `movw r2, #0x2400`, which no address rewrite sees: it must be
+`#:lower16:0xC0D02400`. Rows added.
+
+**The picker's tables.** The fp's recording-resolution tables (TAB1/2/3 = 0xC0BE5810 / 59B0 / 5B50, 8/10/12-bit,
+26 entries of {5, sensor mode, id, key*}, keys "UHD30" … "FHD100CROP") have no counterpart of the same shape on
+the fp L. The fp L's entries (around 0xC0CBE7F0..0xC0CBED80) are {**key*** first, a type 1/3/5 (likely 8/10/12-bit),
+an id, …}, keys composed differently ("UHD23_98FPS", "FHD119_88FPS", plus "8B/10B/12B", "PINP", "MAG4" parts),
+in several runs per type, searched by the generic lookup (descriptor base +0x18, count +0x1C). res-custom's
+picker returns entries in the fp's layout, so on the fp L it is a **redesign**, not a re-address: understand the
+fp L's key composition and the meaning of the id, then serve our formats' entries in the fp L's layout.
+
+## Where the 54 hooks stand
+
+| state | hooks |
+|---|---|
+| identical, or the same call via a mapped target | 46 (42 + fps1..4) |
+| found by pattern / correspondence (`verify`) | canvas, vpro, save, mag |
+| found, needs a shim change | angtv (`#:lower16:`) |
+| not needed on the fp L (never called) | v32, binpath |
+| redesign (different data model) | picker |
+
+Code changes for the fp L besides addresses: angtv's replay; ogc.c's G_MAG constant (return v + 8); leave out
+v32/binpath; the picker.
