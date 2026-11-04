@@ -425,3 +425,36 @@ descriptor holds only the tables the core already covers. The six inline R10 sca
 factory test commands (mode_list, testpattern, adj_init ...). So the membership test is a search of the
 mode tables themselves; next: cmpprobe on all 29 loops, its counters written to the card by sdtrig
 (`CMPPROBE_COUNTS=1 sdprobe.py cmp`), so a search for 230 just before the camera dies is kept.
+
+## Three IMX455-only per-mode tables the core does not know (static, 2026-11-04)
+Searching the image for tables in the timing table's row order (85 rows, ids 0, 129, 97, ...) found three
+more, all reached through a second sensor object, 0xC343C5B4, built by FUN_c0329f68 from three getters:
+[0] = 0xC0B98DE0 (REG, hooked as lk_reg = 0xC032C5F0), [4] = 0xC0BB05CC, [8] = 0xC0BB01C8.
+
+| table | descriptor {base, count} | stride | index search (id -> i, -1 on a miss) | row copier (dst, obj, id) | copier's callers |
+|---|---|---|---|---|---|
+| T3C | 0xC0BB05D4 {0xC0BB2468, 85} | 0x3C | 0xC032C658 | 0xC032C4E0 | 0xC0329498, 554, 608, 868 |
+| T5C | 0xC0BB05CC {0xC0BB05DC, 85} | 0x5C | 0xC032C6C0 | 0xC032C548 | 0xC0329A90, BB8, C08, C70, D0C, DA4 |
+| T0C | 0xC0BB01C8 {0xC0BB01D0, 85} | 0x0C | 0xC032C728 | 0xC032C598 | 0xC0327AEC, BE0, C0C, C34 |
+
+None has a counterpart in the core: a virtual id misses, the search returns -1 and the copier copies the
+row before the table (row -1), which is what reads differently for a real id and a virtual one. Mode 161
+is row 26 in all three (as in the timing table). Live test: `tablepatch.py apply 230 161` copies donor
+161's row over row 84 (mode 217) in each table, relabelled 230; `restore` puts the image's rows back.
+
+**The fix (static + emulated, 2026-11-04):** three fp L-native `b` hooks, `lk_x3c` 0xC032C658, `lk_x5c`
+0xC032C6C0, `lk_x0c` 0xC032C728 (ogc_layout.XLOOKS). For an id in the core's virtual range, one shared shim
+body (`xlook`, ogc_shims.S) asks `ogc_donor` (FN DONOR, fp L only) for the vm's donor and runs the search
+with it, so each copier gets the donor's row; any other id goes straight down. Their return addresses
+are written in decimal, so fwtarget doesn't map them. test_fpl_rescustom
+`test_imx455_searches_find_the_donor_row_for_a_virtual_id` runs the shims against the real search code
+in unicorn (230 -> 26, 217 -> 84, 231 -> -1, 161 -> 26); with the swap removed it fails with -1, the
+crash mechanism. fp core unchanged (7b575c72). fp L core `77d0dd65…`; card
+`cards/20261104-rescustom-uhdx-r5-xlook` = r4 with only that BIN changed (UHDX.RCD `a2375fd0…` as r4).
+
+**UHDX on the camera (r5, 2026-11-04): it records.** Cold boot, UHDX at 23.98, virtual mode 230 → the
+recording starts and stops normally, no lines. The three IMX455-only tables were the cause of every
+RES-Custom recording crash on the fp L (OG48K, OG4K, UHDX r3/r4).
+Clip `A001_136` (r5, UHDX): 104 frames, 4.3 s, 3856x2170 8-bit uncompressed, ActiveArea 0,0,2170,3856,
+DefaultCrop 3840x2160 at (8,5), FrameRate 23.976 -- the same tags and file size (8,447,488 B) as a
+stock UHD clip (A001_131). Frame 50 is a clean picture, no lines.

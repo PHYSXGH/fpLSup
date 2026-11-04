@@ -159,5 +159,52 @@ class FplBuildTests(unittest.TestCase):
         self.assertIn('OCD01010100', texts, log)
         self.assertIn('OCO00000000', texts, log)
 
+    def test_imx455_searches_find_the_donor_row_for_a_virtual_id(self):
+        """lk_x3c / x5c / x0c (RESCUSTOM_PORT.md: the three IMX455-only per-mode tables): the shims run
+        against the real search code.  A virtual id gets the donor's row (161 -> row 26 in all three),
+        a real id goes straight down (217 -> 84), an id outside the range still misses (-1).  FN_DONOR is
+        a stub answering 161 (ogc_donor: the vm's DONOR word)."""
+        try:
+            from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM
+            from unicorn import arm_const as A
+        except ImportError:
+            self.skipTest('needs unicorn')
+        core, facts = self.core, self.f
+        L0, SC, sh = int(facts['layout0'], 16), int(facts['s_coord'], 16), facts['shims']
+        S = facts['S']
+        mu = Uc(UC_ARCH_ARM, UC_MODE_ARM)
+        mu.mem_map(0xC0000000, (len(self.img) + 0xFFFF) & ~0xFFFF)
+        mu.mem_write(0xC0000000, self.img)
+        lay = core[facts['img_off']: facts['img_off'] + (SC - L0) + 0x1000]
+        mu.mem_write(L0, lay)                        # at its own coordinates: no pair rewrite needed
+        WORK, STUB, OBJ, VM, DONE = 0x10000000, 0x10001000, 0x10002000, 0x10003000, 0x10004000
+        mu.mem_map(WORK, 0x100000)
+        put = lambda a, *v: mu.mem_write(a, struct.pack(f'<{len(v)}I', *v))
+        put(STUB, 0xE3A000A1, 0xE12FFF1E)            # mov r0, #161; bx lr
+        put(OBJ, 0xC0B98DE0, 0xC0BB05CC, 0xC0BB01C8)  # the sensor object 0xC343C5B4's three words
+        put(VM + facts['VM']['DONOR'], 161)
+        put(SC + S['VMID0'], 230)
+        put(SC + S['NVM'], 1)
+        put(SC + S['VMS'], (VM - SC) & 0xFFFFFFFF)
+        put(SC + facts['fns']['DONOR'], STUB)
+        hooks = {h['site']: h for h in facts['hooks']}
+
+        def run(site, ident):
+            h = hooks[f'0x{site:08X}']
+            put(int(h['next'], 16), int(h['replay'], 16))
+            mu.reg_write(A.UC_ARM_REG_SP, WORK + 0x80000)
+            mu.reg_write(A.UC_ARM_REG_R0, OBJ)
+            mu.reg_write(A.UC_ARM_REG_R1, ident)
+            mu.reg_write(A.UC_ARM_REG_LR, DONE)
+            mu.emu_start(int(h['to'], 16), DONE, count=2000)
+            return mu.reg_read(A.UC_ARM_REG_R0)
+
+        for site in (0xC032C658, 0xC032C6C0, 0xC032C728):
+            with self.subTest(site=hex(site)):
+                self.assertEqual(run(site, 230), 26)
+                self.assertEqual(run(site, 217), 84)
+                self.assertEqual(run(site, 231), 0xFFFFFFFF)
+                self.assertEqual(run(site, 161), 26)
+
 if __name__ == '__main__':
     unittest.main()

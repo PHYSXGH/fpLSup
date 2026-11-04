@@ -897,6 +897,17 @@ uint64_t ogc_vlook(u8 *S, u32 k, u32 obj, u32 id)
     return (uint64_t)idx | ((uint64_t)1 << 32);
 }
 
+#ifdef OGC_FPL
+/* ---- the fp L's three IMX455-only id searches (lk_x3c/x5c/x0c) ---------------- *
+ * The shim calls this only for an id in our range: the donor's id, or the id itself
+ * when that slot holds no mode. */
+u32 ogc_donor(u8 *S, u32 id)
+{
+    u32 vm = vm_of(S, id);
+    return vm && W(vm + VM_DONOR) ? W(vm + VM_DONOR) : id;
+}
+
+#endif
 /* ---- the four shutter-angle call sites of FUN_c032c750 (og3kfps) ------------- *
  * As today's core: while an OG is live, the angle arithmetic of our mode gets the
  * picked rate's nominal fps; an entry with 0 (OG3K100) keeps the getter's answer. */
@@ -2957,6 +2968,9 @@ int ogc_v3_entry(u8 *block, const struct sl_svc *svc, const char *path)
     SW(S, FN_VGUI) = (u32)(uintptr_t)&ogc_virtual_gui;
     SW(S, FN_BINPATH) = (u32)(uintptr_t)&ogc_binpath;
     SW(S, FN_BINKERNEL) = (u32)(uintptr_t)&ogc_binkernel;
+#ifdef OGC_FPL
+    SW(S, FN_DONOR) = (u32)(uintptr_t)&ogc_donor;
+#endif
     SW(S, S_ENABLE_FN) = (u32)(uintptr_t)&ogc_enable_set;
     for (u32 i = 0; i < SW(S, S_NENT); i++) W(entp(S, i) + ENT_KEYPTR) = entp(S, i) + ENT_KEY;
 

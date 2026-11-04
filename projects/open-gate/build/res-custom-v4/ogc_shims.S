@@ -444,6 +444,43 @@ LOOKUP lk_r68,  T_R68,  NX_LK_R68,  0xC0320C04, r4, r5, r6, r7
 LOOKUP lk_reg,  T_REG,  NX_LK_REG,  0xC0326DBC, r4, r5, r6, r7, sl
 LOOKUP lk_r10,  T_R10,  NX_LK_R10,  0xC031FFA4, r4, r5, r6, r7
 
+#ifdef OGC_FPL
+/* ---- the fp L's three IMX455-only id searches: r0 obj, r1 mode id -> index -----
+ * Ours: the search runs with the donor's id (ogc_donor), so the copier gets the
+ * donor's row; anything else goes straight down.  One body: each entry hands it
+ * ip = its S.NEXT slot.  The way back is written in decimal: fp L addresses
+ * (0xC032C65C/6C4/72C), not fp ones to be mapped. */
+xlook:
+    push    {r0, r1, r2, r3, r4, ip, lr}    @ CALLC keeps the old sp in r4
+    LDA     r2, S
+    ldr     r3, [r2, #S_VMID0]
+    sub     r3, r1, r3
+    ldr     r2, [r2, #S_NVM]
+    cmp     r3, r2
+    bhs     1f
+    CALLC   FN_DONOR                    @ r1 = the id
+    str     r0, [sp, #4]                @ the saved r1 := the donor
+1:  pop     {r0, r1, r2, r3, r4, ip, lr}
+    ldr     ip, [ip]
+    bx      ip
+
+.macro XLOOK name, nx, back, regs:vararg
+.global \name
+\name:
+    LDA     ip, (S + \nx)
+    b       xlook
+.global \name\()_replay
+\name\()_replay:
+    push    {\regs}
+    LDA     ip, \back
+    bx      ip
+.endm
+
+XLOOK lk_x3c, NX_LK_X3C, 3224553052, r4, r5, r6, r7, sl
+XLOOK lk_x5c, NX_LK_X5C, 3224553156, r4, r5, r6, r7
+XLOOK lk_x0c, NX_LK_X0C, 3224553260, r4, r5, r6, r7, sl
+#endif
+
 /* ---- the four `bl FUN_c032c750(mode)` shutter-angle sites (og3kfps) ---------- */
 .macro FPS name, nx
 .global \name

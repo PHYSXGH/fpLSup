@@ -271,6 +271,8 @@ if FPL:
 # ---- C entry points (S.FN + 4*i) and hook slots (S.NEXT + 4*i) ----------------
 FNS = ['PICK', 'SEL', 'FMT', 'CANVAS', 'NAME', 'OUT', 'VLOOK', 'V32', 'AC38', 'FPS', 'CMT', 'SAVE',
        'QSREC', 'QSLAY', 'QSLOAD', 'GATE', 'RCMT', 'VTV', 'VGUI', 'BINPATH', 'BINKERNEL', 'RECRATE', 'HDRCOPY', 'BULK', 'BIT']
+if FPL:
+    FNS = FNS + ['DONOR']     # the IMX455-only tables' lookups (XLOOKS): a virtual id -> its donor
 HOOKS = [  # name, site, kind, replay ('' = BL site through its own target / none)
     # Inner copy entry: leave Gyro2's outer C038C77C chain intact.
     ('hdrcopy', 0xC00FBB90, 'tw'),
@@ -340,7 +342,13 @@ if FPL:
     HOOKS = [h for h in HOOKS if h[0] not in ('v32', 'binpath', 'picker')]
     PICKS = [('pick8', 0xC043BAB0, 'bl'), ('pick10', 0xC043BAE4, 'bl'), ('pick12', 0xC043BB10, 'bl')]
     HOOKS += PICKS
-    NATIVE_SITES = {n for n, _, _ in PICKS}
+    # Three IMX455-only per-mode tables (sensor object 0xC343C5B4 [4] / [8]; RESCUSTOM_PORT.md "Three
+    # IMX455-only per-mode tables"), each searched by mode id: a miss returns -1 and the row copier
+    # copies the row before the table -- the recording crash of every virtual mode.  The search gets
+    # the donor's id instead (r0 obj, r1 id -> index).  fp L addresses: the fp has no such tables.
+    XLOOKS = [('lk_x3c', 0xC032C658, 'b'), ('lk_x5c', 0xC032C6C0, 'b'), ('lk_x0c', 0xC032C728, 'b')]
+    HOOKS += XLOOKS
+    NATIVE_SITES = {n for n, _, _ in PICKS + XLOOKS}
 RFLAG_CLAMP, RFLAG_MAG8, RFLAG_CROP = 1, 2, 4
 # the virtual frame rates, core-defined (rcd entries only say which ones they time):
 # rank (fps x 100), the stock internal it rides on, that rate's export (summary)
