@@ -50,6 +50,7 @@ def _f(x):
 OG4K_RASTER = (3856, 2568)
 OG4K_ACT = (3840, 2552)
 OG4K_BASE = 2061
+OG4K_RESIZE = 1269                 # stock p2001 (read 4784x2700 -> raster 3856x2170, crop 1.00)
 
 ROWS = {
     # 2026-11-04, card 20261104-rescustom-og48k-r1, the user: live view showed the 3:2 open gate, but
@@ -101,7 +102,11 @@ ROWS = {
                     (0x24, OG4K_ACT[0]), (0x2C, OG4K_ACT[1]),
                     (0xDC, OG4K_RASTER[0]), (0xE4, OG4K_RASTER[1]),
                     (0xF4, READ[0]), (0xF8, READ[1]),
-                    (0xFC, SCALE_2), (0x100, SCALE_2), (0x104, SCALE_2)],
+                    (0xFC, SCALE_2), (0x100, SCALE_2), (0x104, SCALE_2),
+                    # the read -> raster downscale x 1024 (one value, all four): p2061's 2539 is
+                    # 9568 -> 3856; ours is the 2x-binned 4784 -> 3856, stock p2001's 1269
+                    # (r6 recorded p2061's: a 1928-wide picture in a 3856 raster, A001_139)
+                    (0x60, OG4K_RESIZE), (0x64, OG4K_RESIZE), (0xD0, OG4K_RESIZE), (0xD4, OG4K_RESIZE)],
         canvas_pb=[(0x0C, OG4K_RASTER[0]), (0x10, OG4K_RASTER[1]), (0x1C, 2),
                    (0x20, OG4K_ACT[0]), (0x28, OG4K_ACT[1]),
                    (0xD8, OG4K_RASTER[0]), (0xE0, OG4K_RASTER[1]),

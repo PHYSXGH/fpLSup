@@ -489,3 +489,17 @@ some frames are washed out pink. Reading: the recorder writes a buffer whose geo
 raster the DNG declares (the 4784x3190 read not scaled to 3856x2568, or a different line pitch), and
 exposure is not under control (per-frame brightness swings). Next: what the fp L's recording path takes
 the read size / scale / line pitch from (canvas +0xF4..+0x104 were the fp's) and the exposure for mode 230.
+
+**The mosaic: OG4K kept its base profile's downscale (static, 2026-11-04).** Over all stock fp L canvases,
++0xFC..+0x104 is the read's binning (1.0 full, 2.0 2x2, 3.0 ...), not a downscale, and +0x60/+0x64/+0xD0
+/+0xD4 hold one value, the read -> raster downscale x 1024 at that crop step: p2001..2005 (read 4784x2700
+binned -> 3856x2170) 1269, 1203, 1141, 1084, 1028; p2021.. / p2061 (9568x5382 -> 3856x2170) 2539, ...;
+p2081.. (3184 -> 1936) 1684, .... OG4K set the 4784 read and binning 2.0 but kept p2061's 2539: the
+picture came out 4784 / 2.48 = 1928 wide (and 1284 high) in a 3856x2568 raster -- the small copy in
+A001_139's corner, the rest of the buffer stale memory (the brightness swings). Card r7
+(`cards/20261104-rescustom-og4k-r7-resize`, OG4K.RCD `e42a4501…`) sets the four to 1269 (p2001's: the
+same 4784 -> 3856 width ratio; 3190 -> 2568 is 1.242, the same within a line) and drops UHDX.RCD.
+
+**OG4K records on the fp L (card r7, 2026-11-04).** A001_140 (23.98, 54 frames) and A001_141 (17.98,
+65 frames): 3856x2568 8-bit, DefaultCrop 3840x2552 at (8,8), FrameRate 23.976 / 17.982; clean 3:2
+open-gate pictures, edge to edge, frame brightness steady (the earlier swings were the stale buffer).

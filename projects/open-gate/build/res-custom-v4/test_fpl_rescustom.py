@@ -88,6 +88,23 @@ class FplBuildTests(unittest.TestCase):
                          {'OG4K23_98FPS', 'OG4K24FPS', 'OG4K25FPS', 'OG4K29_97FPS'})
         self.assertTrue(all(e['donor'] == 98 for e in d['entries']))
 
+    def test_og4k_resize_is_stock_p2001s(self):
+        """canvas +0x60/+0x64/+0xD0/+0xD4: the read -> raster downscale x 1024.  OG4K reads mode 98's
+        2x-binned 4784 wide into 3856 -- stock p2001's ratio (4784x2700 -> 3856x2170), not its base
+        p2061's (9568 -> 3856, 2539; card r6 recorded a 1928-wide picture with it)"""
+        import rcd
+        sys.path.insert(0, str(ROOT / 'projects' / 'fpl-port' / 'tools'))
+        import canvas_compare as C
+        cols = C.columns(self.img, C.FPL['builder'])
+        row = word(self.img, C.FPL['mapping'] + 4 * 2001)
+        p2001 = {o: word(self.img, c + 4 * row) for o, c in cols.items()}
+        self.assertEqual((p2001[0xF4], p2001[0x00], p2001[0xFC]), (4784, 3856, 0x40000000))
+        d = rcd.decode((self.out / 'RESCUS' / 'OG4K.RCD').read_bytes(), self.img, None)
+        rec = dict(d['canvas_rec'])
+        self.assertEqual((rec[0xF4], rec[0x00], rec[0xFC]), (4784, 3856, 0x40000000))
+        for off in (0x60, 0x64, 0xD0, 0xD4):
+            self.assertEqual(rec[off], p2001[off], hex(off))
+
     def test_the_three_picks_are_bl_hooks_on_the_lookups_and_last(self):
         hooks = self.hooks()
         self.assertEqual([s for s, _ in hooks[-3:]], sorted(PICKS))
