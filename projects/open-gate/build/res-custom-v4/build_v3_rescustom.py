@@ -41,6 +41,7 @@ UISHARE = FPSUP / 'uishare'
 IMAGE = ROOT / 'out' / 'MAIN_c0000000.bin'
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(BUILD))
+sys.path.insert(1, str(FPSUP / 'fp_usb_shell'))          # armasm (a link to it) needs fwtarget
 import ogc_layout as L                                   # noqa: E402
 
 CHAIN, EXCL, SHARED_UI = 1, 2, 3

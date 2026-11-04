@@ -117,3 +117,26 @@ Plan for res-custom on the fp L: hook the three lookups (r0 = the descriptor slo
 ogc_pick with the bit depth the hooked lookup stands for, and return our entry in the same layout; the
 crop test moves from the key suffix to the crop step. Next: read a live descriptor (capture r0/r1 at one
 lookup on the camera) to see its tables' contents (sensor modes per crop step).
+
+## The live tables (camera, 2026-11-04)
+
+A RAM-only capture on the three lookups (cold boot, card r4; removed and read back): the 8-bit lookup
+0xC043D0A8 ran 1,018 times with key "FHD23_98FPS", descriptor slot 0xC375F82C (= obj + 0x588, obj 0xC375F2A4),
+descriptor 0xC375F918; the 10/12-bit ones not at all (the camera's current setting).
+
+Each entry is **{type (1 stills/LV, 3 and 5 CinemaDNG), profile id, IMX455 sensor mode, key*}**: the third field
+is the sensor mode of `imx455_modes.csv` (UHD23_98FPS = 161, FHD23_98FPS = 173 at 1.00×, as the takes' profiles
+said). All 33 crop steps' descriptors, read once: `imx455_recording_tables.txt`. In short:
+
+| crop step | UHD 23.98 | FHD 23.98 | FHD 59.94 |
+|---|---|---|---|
+| 1.00, 1.05 … | 161 | 173 | 166 |
+| 1.37, 1.53 … | 187 | 173 | 166 |
+| 2.00, 2.48 … | 187 | 187 | 188 |
+| 3.18 and up (FHD only) | — | 187 | 196 |
+
+This is also the menu-setting → sensor-mode map asked for earlier (`imx455_modes.csv`). EIS variants have their
+own keys ("…EIS"); DCI4K has its own table (+0x40).
+
+For res-custom: the picker hook goes on the three lookups (each with its bit depth), returns entries in this
+layout (sensor mode in the third word: the virtual mode's id), and the "crop" test becomes the crop step.
