@@ -1,0 +1,31 @@
+# res-custom on the fp L (phase 2, started 2026-11-04)
+
+Source: `projects/open-gate/build/res-custom-v4` (Loader v4 build of v0.1.4test). Loader v4 runs on the fp L
+(`LOADER_V4.md`).
+
+## Hook sites (54, `ogc_layout.HOOKS`)
+
+Compared against the fp L image (fp site mapped; the same word, or a branch with the same condition whose
+target maps to the fp L target):
+
+- **42 identical** at their mapped sites.
+- **fps1–fps4** (0xC02092CC, 0xC0218AEC, 0xC0219260, 0xC03AA568): the same calls; their target fp
+  0xC032C750 is fp L **0xC032C820** (54 of its 55 fp callers map to calls of it). Fine.
+- **canvas** 0xC043A19C → **0xC0439934**, **vpro** 0xC043A18C → **0xC0439924**, **save** 0xC0088C60 →
+  **0xC00862D4**: unique pattern matches (13 / 13 / 9 instructions, branch offsets and constants masked).
+  Rows `verify`: confirm by reading each function before use.
+- **angtv** 0xC052DCFC → 0xC052A3B4: same instruction, different constant (`movw r2, #0x2400` on the fp,
+  `#0x2930` on the fp L). To read: what the constant is (a shutter/angle limit?) and whether the shim
+  depends on it.
+- **picker** 0xC043CCF8 (the recording-resolution picker entry) and **mag** 0xC043B6A4 (`movw r1, #0x46F0`,
+  "MAG4"): no pattern match, no mapped caller. To find in the fp L's recording-settings code.
+- **v32** 0xC03249A0 and **binpath** 0xC0325228: methods of `XC_ImageSensorIMX410` (vtable fp 0xC0B5FC80,
+  slots +0xC8 and +0xDC). The fp L's sensor vtable is at **0xC0B90DF4** (slots +0x90, +0x94, +0xE0..+0x120
+  hold the mapped fp functions). Its slot +0xC8 is 0xC0326210 and +0xDC is 0xC0326268, and **both are
+  empty stubs** (`return`). Many other IMX410-specific slots hold one shared default (0xC01F1F24) on the
+  fp L. So the IMX455 driver does not serve a mode's row through v32, nor adjust binning through binpath:
+  res-custom's virtual modes need the IMX455's own path for these. Next: find who calls slots +0xC8 / +0xDC
+  on the fp and what the fp L does at the same call sites.
+
+The generic table accessors res-custom hooks (`lk_tim`, `lk_meta`, `lk_r28`, `lk_r38`, `lk_r14`, `lk_r68`,
+`lk_reg`, `lk_r10`; FUN_c0320xxx / c0326db8 / c031ffa0) are identical on the fp L.

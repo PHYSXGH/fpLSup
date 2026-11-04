@@ -332,3 +332,7 @@
 0xc05fb680	0xc05f7860	auto	exact (-0x3e20), bytes16 same; UI tooling (imx410_rate_ui / test_ft6)
 0xc05fb6f8	0xc05f78d8	auto	exact (-0x3e20), bytes16 same; UI tooling (imx410_rate_ui / test_ft6)
 0xc0600ea8	0xc05fd088	auto	exact (-0x3e20), bytes16 same; UI tooling (imx410_rate_ui / test_ft6)
+0xc032c750	0xc032c820	checked	sensor-timing function the four fps hooks call: 54 of its 55 fp callers map to calls of 0xC032C820 (res-custom fps1..4)
+0xc043a19c	0xc0439934	verify	res-custom canvas hook site: unique 13-instruction pattern match (branches/constants masked)
+0xc043a18c	0xc0439924	verify	res-custom vpro hook site: unique 13-instruction pattern match
+0xc0088c60	0xc00862d4	verify	res-custom save hook site: unique 9-instruction pattern match
