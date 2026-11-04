@@ -36,6 +36,29 @@ TAB_WORDS = 48
 EXPORT_CAP = 0x20000
 
 
+
+def _font(kind):
+    """A font file for rendered tiles.  The builds were made on macOS; on another
+    system the env var (FPSUP_FONT_NARROW_BOLD / FPSUP_FONT_HELVETICA) names the
+    real file, else the URW metric-compatible stand-in is used -- the tiles then
+    differ from a Mac build byte for byte (projects/fpl-port/RESCUSTOM_PORT.md)."""
+    import os, sys
+    mac = {'narrow-bold': '/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf',
+           'helvetica': '/System/Library/Fonts/Helvetica.ttc'}[kind]
+    env = os.environ.get({'narrow-bold': 'FPSUP_FONT_NARROW_BOLD', 'helvetica': 'FPSUP_FONT_HELVETICA'}[kind])
+    if env:
+        return env
+    if os.path.exists(mac):
+        return mac
+    sub = {'narrow-bold': '/usr/share/fonts/urw-base35/NimbusSansNarrow-Bold.otf',
+           'helvetica': '/usr/share/fonts/urw-base35/NimbusSans-Regular.otf'}[kind]
+    if os.path.exists(sub):
+        if not getattr(_font, 'said', set()) >= {kind}:
+            print(f'note: {mac} not found; using {sub} (tiles differ from a macOS build)', file=sys.stderr)
+            _font.said = getattr(_font, 'said', set()) | {kind}
+        return sub
+    return mac
+
 def slmp(virtual=False):
     """Stock recording rows; only Help navigates to the independent calculator."""
     import sl_b25_page as SP
@@ -125,7 +148,7 @@ def export_pack():
     atlas = bytearray()
     for w, h, cap in ((10, 18, 15), (18, 28, 24)):
         for ch in '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-ab':
-            font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', cap-2)
+            font = ImageFont.truetype(_font('helvetica'), cap-2)
             a = Image.new('L', (w,h)); draw = ImageDraw.Draw(a)
             box = draw.textbbox((0,0),ch,font=font)
             draw.text(((w-box[2]+box[0])//2-box[0],(h-box[3]+box[1])//2-box[1]),ch,font=font,fill=255)

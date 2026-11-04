@@ -11,7 +11,11 @@ import pathlib, re, struct, subprocess, sys, tempfile
 def _compile(src, defines=()):
     """Assemble to an object file and return (elf_bytes,)."""
     src = pathlib.Path(src)
-    import fwtarget as camera
+    try:
+        import fwtarget as camera
+    except ImportError:     # reached through a link (open-gate/build) with this directory off the path
+        sys.path.append(str(pathlib.Path(__file__).resolve().parent))
+        import fwtarget as camera
     if camera.CAMERAS[camera.target()] is not None:
         return _compile_translated(src, defines, camera)
     defines = tuple(defines) + camera.asm_defines()     # () on the fp

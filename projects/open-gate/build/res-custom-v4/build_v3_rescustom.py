@@ -38,11 +38,15 @@ ROOT = BUILD.parent.parent.parent
 FPSUP = ROOT / 'fpSup'
 V3 = FPSUP / 'fp_usb_shell' / 'v3'
 UISHARE = FPSUP / 'uishare'
-IMAGE = ROOT / 'out' / 'MAIN_c0000000.bin'
+_CAM = (__import__('os').environ.get('FPSUP_CAMERA', 'fp').strip().lower() or 'fp')
+IMAGE = ROOT / ('out' if _CAM == 'fp' else f'out_{_CAM}') / 'MAIN_c0000000.bin'   # the target's image
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(BUILD))
 sys.path.insert(1, str(FPSUP / 'fp_usb_shell'))          # armasm (a link to it) needs fwtarget
 import ogc_layout as L                                   # noqa: E402
+import fwtarget                                          # noqa: E402
+_fw = fwtarget.fw          # fp address -> the target camera's (identity on the fp)
+N_MODES = 85 if L.FPL else 70     # the sensor's modes: timing rows at TT (IMX455 85, IMX410 70)
 
 CHAIN, EXCL, SHARED_UI = 1, 2, 3
 HOOK_B, HOOK_BL, HOOK_TW = 0, 1, 2
@@ -62,8 +66,13 @@ if L.HOOKCNT:
 RCD_DIR = 'RESCUS'
 SHIFT = 0x10000000
 SPAN = 0x8000                       # the layout must fit og_pic's window
-TT = 0xC0B59500                     # the timing table (claimed, never written)
+TT = 0xC0B59500                     # the timing table (claimed, never written); fp address
 FORMATS = ('og3k', 'og2k', 's16', 'og35k', 'og4k')
+if L.FPL:
+    # the five are IMX410 formats: their donor modes are fp sensor modes the fp L
+    # (IMX455) does not have, so rcd.decode refuses them (ENTRY).  fp L formats are
+    # port phase 3 (projects/fpl-port/RESCUSTOM_PORT.md); until then the core ships alone
+    FORMATS = ()
 JOSE = ('s16', 'og35k', 'og4k')       # jose_formats.py (milestone 5)
 GEOMETRY = {'OG3K': 'OG3K 3008x2000', 'OG2K': 'OG2K 2000x1334'}   # the menu sups' row texts
 
@@ -118,12 +127,12 @@ def check_ids(image):
     if len(set(L.VPID_POOL)) != L.MAX_VARS or L.VPID_POOL[:L.MAX_ROWS] != list(range(L.VPID0, L.VPID0 + L.MAX_ROWS)):
         raise BuildError('the virtual profile pool')
     for pid in L.VPID_POOL:
-        if word(L.MAPPING + 4 * pid, image) != 0xFFFFFFFF:
+        if word(_fw(L.MAPPING) + 4 * pid, image) != 0xFFFFFFFF:
             raise BuildError(f'virtual profile {pid}: the mapping slot is not empty')
-        for lo, hi in ((0, 4), (5, 11), (17, 40), (101, 129), (131, 198), (301, 312), (401, 434)):
+        for lo, hi in L.PROFILE_CLASSES:
             if lo <= pid <= hi:
                 raise BuildError(f'virtual profile {pid} falls in FUN_c043a1c8 class {lo}..{hi}')
-    stock_ids = {word(TT + 0x20 * i, image) for i in range(70)}
+    stock_ids = {word(_fw(TT) + 0x20 * i, image) for i in range(N_MODES)}
     for v in range(L.MAX_VMS):
         vid = L.VMID0 + v
         if vid in stock_ids or vid in (0x77, 0x99, 0x9A, 0xB7) or 0xA6 <= vid <= 0xAE or vid >= 250:
@@ -141,9 +150,9 @@ def layout(origin, tmp):
     d.mkdir()
     hdr = L.header()
     if origin != L.LAYOUT0:
-        hdr = hdr.replace(f'#define OGC_LAYOUT0 0x{L.LAYOUT0:X}', f'#define OGC_LAYOUT0 0x{origin:X}')
-        hdr = hdr.replace(f'#define OGC_S_COORD 0x{L.S_COORD:X}',
-                          f'#define OGC_S_COORD 0x{origin + L.SHIMS_MAX:X}')
+        hdr = hdr.replace(f'#define OGC_LAYOUT0 {L.LAYOUT0}', f'#define OGC_LAYOUT0 {origin}')
+        hdr = hdr.replace(f'#define OGC_S_COORD {L.S_COORD}',
+                          f'#define OGC_S_COORD {origin + L.SHIMS_MAX}')
     (d / 'ogc_layout.h').write_text(hdr)
     shutil.copy2(HERE / 'ogc_shims.S', d / 'ogc_shims.S')
     if L.HOOKCNT:                   # hookcnt[i] at S - HOOKCNT_BACK + 4i: calls through hook i (L.HOOKS order)
@@ -193,9 +202,21 @@ def compile_core(tmp, tab_off, probe=False, v4=False):
     clang = shutil.which('clang') or 'clang'
     inc = (['-DOGC_V4', '-I', str(FPSUP / 'fpsup-ui'), '-I', str(FPSUP / 'loader-v4')] if v4
            else ['-I', str(V3)])
-    r = subprocess.run([clang, *build_section.CFLAGS, f'-DOGC_TAB_OFF=0x{tab_off:X}u',
-                        '-I', str(tree), *inc, '-c', str(unit), '-o', str(obj)],
-                       capture_output=True, text=True)
+    if not L.FPL:
+        r = subprocess.run([clang, *build_section.CFLAGS, f'-DOGC_TAB_OFF=0x{tab_off:X}u',
+                            '-I', str(tree), *inc, '-c', str(unit), '-o', str(obj)],
+                           capture_output=True, text=True)
+    else:
+        # Another camera: preprocess, map the fp addresses (fwtarget.translate_c; the
+        # header's coordinates are decimal and stay), compile that (Loader v4's way).
+        pre = tree / 'ogc.i'
+        r = subprocess.run([clang, *build_section.CFLAGS, f'-DOGC_TAB_OFF={tab_off}u',
+                            '-I', str(tree), *inc, '-E', str(unit), '-o', str(pre)],
+                           capture_output=True, text=True)
+        if not r.returncode:
+            pre.write_text(fwtarget.translate_c(pre.read_text(), 'ogc.c'))
+            r = subprocess.run([clang, *build_section.CFLAGS, '-x', 'cpp-output', '-c', str(pre), '-o', str(obj)],
+                               capture_output=True, text=True)
     if r.returncode:
         raise BuildError('ogc.c:\n' + r.stderr)
     if probe: return obj
@@ -216,7 +237,7 @@ def build_rcd(formats, tmp):
     """{file name: bytes} and the decoded rows (rcd.decode, as the core sees them)."""
     import rcd
     image = img()
-    stock_ids = {word(TT + 0x20 * i, image) for i in range(70)}
+    stock_ids = {word(_fw(TT) + 0x20 * i, image) for i in range(N_MODES)}
     files, rows = {}, []
     for t in formats:
         d = row_data(t, tmp)
@@ -260,6 +281,8 @@ def build_core(tmp, n_formats=len(FORMATS), virtual=False, v4=False):
     kinds = {'b': HOOK_B, 'bl': HOOK_BL, 'tw': HOOK_TW}
     expected_bit = {'bitclass': 0xE1A00001, 'bitnorm': 0xE1A00003}
     for name, site, kind in L.HOOKS:
+        if name not in L.NATIVE_SITES:
+            site = _fw(site)                    # where it is on the target camera
         if name not in syms:
             raise BuildError(f'shim {name} missing')
         to = L.LAYOUT0 + syms[name + '_cnt' if L.HOOKCNT else name]
@@ -271,7 +294,11 @@ def build_core(tmp, n_formats=len(FORMATS), virtual=False, v4=False):
         if not rp and sw & 0x0F000000 != 0x0B000000:
             raise BuildError(f'{name} 0x{site:08X}: no replay and the stock word is not a BL')
         hooks.append((site, to, kinds[kind], nx, rp, sw))
-    hooks.sort(key=lambda h: h[0] == 0xC043CCF8)            # the picker last
+    if L.FPL:                                   # the pickers last (the fp L's three lookups)
+        picks = {s for n, s, _ in L.PICKS}
+        hooks.sort(key=lambda h: h[0] in picks)
+    else:
+        hooks.sort(key=lambda h: h[0] == _fw(0xC043CCF8))   # the picker last
     if len(hooks) > 64:
         raise BuildError('S.NEXT holds 64')
 
@@ -279,18 +306,19 @@ def build_core(tmp, n_formats=len(FORMATS), virtual=False, v4=False):
     for a, sw in tinfo['sites']:                # the menu: the file-redirect and string sites
         if v4 and a in V4_STRING_SITES:
             continue
-        if stock(a, 4) != struct.pack('<I', sw):
-            raise BuildError(f'uishare site 0x{a:08X}: stock is not the reference image')
-        claims.append((a, struct.pack('<I', sw), SHARED_UI))
+        fa = _fw(a)                             # the template names the fp's site
+        if stock(fa, 4) != struct.pack('<I', sw):
+            raise BuildError(f'uishare site 0x{a:08X} (0x{fa:08X}): stock is not the reference image')
+        claims.append((fa, struct.pack('<I', sw), SHARED_UI))
     for a, n in PAIR_SITES:                 # written at entry, from where S landed (claim only)
-        claims.append((a, stock(a, n), EXCL))
-    if stock(CLK0_SITE, 4) != struct.pack('<I', CLK0_STOCK):
+        claims.append((_fw(a), stock(_fw(a), n), EXCL))
+    if stock(_fw(CLK0_SITE), 4) != struct.pack('<I', CLK0_STOCK):
         raise BuildError('clk0: stock word differs')
-    claims.append((CLK0_SITE, stock(CLK0_SITE, 4), EXCL))
+    claims.append((_fw(CLK0_SITE), stock(_fw(CLK0_SITE), 4), EXCL))
     spans = sorted((a, a + len(s)) for a, s, _ in claims)
     if any(e > a for (_, e), (a, _) in zip(spans, spans[1:])):
         raise BuildError('two claims overlap')
-    tt = b''.join(stock(TT + 0x20 * i + 4, 8) for i in range(70))
+    tt = b''.join(stock(_fw(TT) + 0x20 * i + 4, 8) for i in range(N_MODES))
     # the virtual frame rates' menu (vr_ui, rcd.vr_template): the core applies it at every load
     import vr_ui
     vrtpl = rcd.vr_template(image)
@@ -324,7 +352,7 @@ def build_core(tmp, n_formats=len(FORMATS), virtual=False, v4=False):
         pk, _ = B.assets(tmp / 'virtual-assets', names={'OG3K_QS':'VRC000_QS',
                       'OG3K_SET':'VRC000_SET','OG3K_FONT':'VRC000_FONT'})
         virtual_blob=rcd.encode(d, pk)
-        rcd.decode(virtual_blob,image,{word(TT+32*i,image) for i in range(70)})
+        rcd.decode(virtual_blob,image,{word(_fw(TT)+32*i,image) for i in range(N_MODES)})
 
     def lay_out(tab_off):
         claim_off = tab_off + 4 * TAB_WORDS

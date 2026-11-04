@@ -33,6 +33,11 @@ sys.path.insert(0, str(BUILD))
 import nbu_format as N                                     # noqa: E402
 
 BASE = 0xC0000000
+try:            # the camera FPSUP_CAMERA names: the fp's UI-data addresses, mapped (fwtarget)
+    from fwtarget import fw as _fw
+except ImportError:                                       # pragma: no cover
+    def _fw(a):
+        return a
 # rank (fps x 100), the stock internal it rides on, that rate's export, CSV text, label
 VRATES = ((23976, 7, 10, '239.76 fps', '239.76'),
           (27972, 7, 10, '279.72 fps', '279.72'),
@@ -42,23 +47,23 @@ K = len(VRATES)
 FIRST_ROW = 9                 # rows 9..12 (the stock nine are 0..8)
 
 # ---- B2_5 -------------------------------------------------------------------------
-SET_START, SET_END = 0xC1A5C590, 0xC1A792FB
+SET_START, SET_END = _fw(0xC1A5C590), _fw(0xC1A792FB)
 SET_SHA256 = "6e0d023dbacad3326f24bccca3dcbae58449a5cf07074546ccfa401a77d44080"
-POOL_START, POOL_SIZE = 0xC18C0474, 0x2B018
+POOL_START, POOL_SIZE = _fw(0xC18C0474), 0x2B018
 TEXT_PARENT, ICON_PARENT = 4448, 4457
-TEXT_PARENT_RECORD, ICON_PARENT_RECORD = 0xC1A7638D, 0xC1A76E8A
-DONOR_START, DONOR_END = 0xC1A76E05, 0xC1A76E8A          # IconText09: obj, base, text
+TEXT_PARENT_RECORD, ICON_PARENT_RECORD = _fw(0xC1A7638D), _fw(0xC1A76E8A)
+DONOR_START, DONOR_END = _fw(0xC1A76E05), _fw(0xC1A76E8A)          # IconText09: obj, base, text
 ICONS = tuple(range(4458, 4458 + K))                     # Icon01..Icon04, borrowed
 ICONTEXT10, P_240, DRAWTEXT, DRAWIMAGE = 0x14938, 0x47B4, 0x2541C, 0x253E4
-LIST_ID, LIST_RECORD = 4439, 0xC1A7498B
-LAST_EVENT, LAST_FOCUS = 0xC1A75020, 0xC1A7504C
+LIST_ID, LIST_RECORD = 4439, _fw(0xC1A7498B)
+LAST_EVENT, LAST_FOCUS = _fw(0xC1A75020), _fw(0xC1A7504C)
 KEY0 = 0x14                   # the List's local ids end at 0x13 (events and clips)
 NUMBERS = {'9': 0x5B7C, '10': 0x21C0, '11': 0x266C, '12': 0x2A98, '13': 0x2DF8}
-LIST_CAP = 0xC1A74B44         # the popup List's controller max (BE float)
+LIST_CAP = _fw(0xC1A74B44)         # the popup List's controller max (BE float)
 # (record address, owner, property, body offset, stock, new): tag 0x1000E floats
-CONTROLLERS = ((0xC1A7519D, 4440, 3, 28, 9.0, 9.0 + K),       # ListItem instances
-               (0xC1A73D43, 4434, 0x12, 24, 8.0, 8.0 + K),    # MenuItem_Select (summary)
-               (0xC1A744D5, 4438, 0x12, 24, 8.0, 8.0 + K))    # IconChange (GUI variable)
+CONTROLLERS = ((_fw(0xC1A7519D), 4440, 3, 28, 9.0, 9.0 + K),       # ListItem instances
+               (_fw(0xC1A73D43), 4434, 0x12, 24, 8.0, 8.0 + K),    # MenuItem_Select (summary)
+               (_fw(0xC1A744D5), 4438, 0x12, 24, 8.0, 8.0 + K))    # IconChange (GUI variable)
 
 
 def _put(data, at, value):

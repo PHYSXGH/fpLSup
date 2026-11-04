@@ -30,6 +30,13 @@ def candidate(spec):
         out+=N.split(bytes(data)+struct.pack('>2I',0xFFFFFFFF,8))[:-1]
     return N.join(out),bytes(pool)
 
+def setUpModule():
+    import ogc_layout
+    if ogc_layout.FPL:
+        raise unittest.SkipTest('fp-only (the fp\'s camera model and IMX410 formats); '
+                                'test_fpl_rescustom covers the fp L build')
+
+
 class StyleTests(unittest.TestCase):
     def test_parts_and_integer_rates(self):
         self.assertEqual((len(L.LV_VALUES),len(L.LV_LABELS)),(14,29))

@@ -333,9 +333,142 @@
 0xc05fb6f8	0xc05f78d8	auto	exact (-0x3e20), bytes16 same; UI tooling (imx410_rate_ui / test_ft6)
 0xc0600ea8	0xc05fd088	auto	exact (-0x3e20), bytes16 same; UI tooling (imx410_rate_ui / test_ft6)
 0xc032c750	0xc032c820	checked	sensor-timing function the four fps hooks call: 54 of its 55 fp callers map to calls of 0xC032C820 (res-custom fps1..4)
-0xc043a19c	0xc0439934	verify	res-custom canvas hook site: unique 13-instruction pattern match (branches/constants masked)
-0xc043a18c	0xc0439924	verify	res-custom vpro hook site: unique 13-instruction pattern match
+0xc043a19c	0xc0439934	checked	(same instructions around the MAPPING load) res-custom canvas hook site: unique 13-instruction pattern match (branches/constants masked)
+0xc043a18c	0xc0439924	checked	(same instructions around the MAPPING load) res-custom vpro hook site: unique 13-instruction pattern match
 0xc0088c60	0xc00862d4	verify	res-custom save hook site: unique 9-instruction pattern match
 0xc0d02400	0xc0d12930	checked	the table angtv's movw/movt pair loads (fp C052DCFC/DD00 -> fp L C052A3B4/A3B8, the same code around it) (res-custom)
 0xc052dcfc	0xc052a3b4	checked	res-custom angtv hook site: the movw of that pair
 0xc043b6a4	0xc043b8e8	verify	res-custom mag hook site: the fp L loader of its second MAG4 copy (0xC0CBE16C), as the fp site loads the second
+0xc005be58	0xc0059490	auto	exact, bytes16 same (res-custom)
+0xc005be5c	0xc0059494	auto	exact, bytes16 same (res-custom)
+0xc005c020	0xc0059658	auto	exact, bytes16 same (res-custom)
+0xc005c024	0xc005965c	auto	exact, bytes16 same (res-custom)
+0xc007f5b4	0xc007cc2c	auto	exact, bytes16 same (res-custom)
+0xc00a075c	0xc009cd34	auto	exact, bytes16 same (res-custom)
+0xc00a0760	0xc009cd38	auto	exact, bytes16 same (res-custom)
+0xc00a7ffc	0xc00a45d4	auto	exact, bytes16 same (res-custom)
+0xc00a8000	0xc00a45d8	auto	exact, bytes16 same (res-custom)
+0xc00a93bc	0xc00a5abc	auto	exact, bytes16 same (res-custom)
+0xc00c9bd0	0xc00c6378	auto	exact, bytes16 same (res-custom)
+0xc00fbb90	0xc00f8440	auto	exact, bytes16 same (res-custom)
+0xc00fbb95	0xc00f8445	auto	exact, bytes16 same (res-custom)
+0xc0189440	0xc0185cc0	auto	exact, bytes16 same (res-custom)
+0xc02dafa0	0xc02df048	auto	exact, bytes16 same (res-custom)
+0xc031ac38	0xc031ed50	auto	exact, bytes16 same (res-custom)
+0xc031ac3c	0xc031ed54	auto	exact, bytes16 same (res-custom)
+0xc031acd8	0xc031edf0	auto	exact, bytes16 same (res-custom)
+0xc031acdc	0xc031edf4	auto	exact, bytes16 same (res-custom)
+0xc031b660	0xc031f778	auto	exact, bytes16 same (res-custom)
+0xc031ffa0	0xc03240b8	auto	exact, bytes16 same (res-custom)
+0xc031ffa4	0xc03240bc	auto	exact, bytes16 same (res-custom)
+0xc0320b38	0xc0324c50	auto	exact, bytes16 same (res-custom)
+0xc0320b3c	0xc0324c54	auto	exact, bytes16 same (res-custom)
+0xc0320ba0	0xc0324cb8	auto	exact, bytes16 same (res-custom)
+0xc0320ba4	0xc0324cbc	auto	exact, bytes16 same (res-custom)
+0xc0320c00	0xc0324d18	auto	exact, bytes16 same (res-custom)
+0xc0320c04	0xc0324d1c	auto	exact, bytes16 same (res-custom)
+0xc0320e90	0xc0324fa8	auto	exact, bytes16 same (res-custom)
+0xc0320e94	0xc0324fac	auto	exact, bytes16 same (res-custom)
+0xc0320ef8	0xc0325010	auto	exact, bytes16 same (res-custom)
+0xc0320efc	0xc0325014	auto	exact, bytes16 same (res-custom)
+0xc0320f60	0xc0325078	auto	exact, bytes16 same (res-custom)
+0xc0320f64	0xc032507c	auto	exact, bytes16 same (res-custom)
+0xc03a5144	0xc03a535c	auto	exact, bytes16 same (res-custom)
+0xc03a6dd8	0xc03a6ff0	auto	exact, bytes16 same (res-custom)
+0xc03a6ddc	0xc03a6ff4	auto	exact, bytes16 same (res-custom)
+0xc0437b48	0xc0437d60	auto	exact, bytes16 same (res-custom)
+0xc0437b4c	0xc0437d64	auto	exact, bytes16 same (res-custom)
+0xc0437e98	0xc04380b0	auto	exact, bytes16 same (res-custom)
+0xc0437e9c	0xc04380b4	auto	exact, bytes16 same (res-custom)
+0xc043b6a8	0xc043b8ec	auto	mapped site 0xc043b6a5 + 3 (res-custom replay)
+0xc04a121c	0xc049d47c	auto	exact, bytes16 same (res-custom)
+0xc04a1220	0xc049d480	auto	exact, bytes16 same (res-custom)
+0xc04a13e4	0xc049d644	auto	exact, bytes16 same (res-custom)
+0xc052dd00	0xc052a3b8	auto	mapped site 0xc052dcfd + 3 (res-custom replay)
+0xc05d90f0	0xc05d52d0	auto	exact, bytes16 same (res-custom)
+0xc05d90f5	0xc05d52d5	auto	exact, bytes16 same (res-custom)
+0xc05e6405	0xc05e25e5	auto	mapped site 0xc05e6401 + 4 (res-custom replay)
+0xc05e84dd	0xc05e46bd	auto	mapped site 0xc05e84d9 + 4 (res-custom replay)
+0xc0635db1	0xc0632219	auto	exact, bytes16 same (res-custom)
+0xc0635dc9	0xc0632231	auto	exact, bytes16 same (res-custom)
+0xc06bda48	0xc06bb598	auto	exact, bytes16 same (res-custom)
+0xc06bdb18	0xc06bb668	auto	exact, bytes16 same (res-custom)
+0xc06cb6e8	0xc06c9238	auto	exact, bytes16 same (res-custom)
+0xc0735f60	0xc0733930	auto	exact, bytes16 same (res-custom)
+0xc0306ea0	0xc030af38	checked	res-custom hook aspect: the same instruction (a branch to the mapped target) at the mapped site
+0xc0306eec	0xc030af84	checked	res-custom hook aspect2: the same instruction (a branch to the mapped target) at the mapped site
+0xc0326db8	0xc032c5f0	checked	res-custom hook lk_reg: the same instruction (a branch to the mapped target) at the mapped site
+0xc02092cc	0xc0205fb4	checked	res-custom hook fps1: the same instruction (a branch to the mapped target) at the mapped site
+0xc0218aec	0xc02157d4	checked	res-custom hook fps2: the same instruction (a branch to the mapped target) at the mapped site
+0xc0219260	0xc0215f48	checked	res-custom hook fps3: the same instruction (a branch to the mapped target) at the mapped site
+0xc03aa568	0xc03aa780	checked	res-custom hook fps4: the same instruction (a branch to the mapped target) at the mapped site
+0xc057a6a0	0xc05767b8	checked	res-custom hook cmt_set: the same instruction (a branch to the mapped target) at the mapped site
+0xc05824d0	0xc057e5e8	checked	res-custom hook cmt_qs: the same instruction (a branch to the mapped target) at the mapped site
+0xc04a1788	0xc049d9e8	checked	res-custom hook cropst: the same instruction (a branch to the mapped target) at the mapped site
+0xc00a87e4	0xc00a4dbc	checked	res-custom hook frmax: the same instruction (a branch to the mapped target) at the mapped site
+0xc057a6f8	0xc0576810	checked	res-custom hook rcmt1: the same instruction (a branch to the mapped target) at the mapped site
+0xc05821b8	0xc057e2d0	checked	res-custom hook rcmt2: the same instruction (a branch to the mapped target) at the mapped site
+0xc0553cdc	0xc054fb3c	checked	res-custom hook tvmin2: the same instruction (a branch to the mapped target) at the mapped site
+0xc0554768	0xc05505c8	checked	res-custom hook anglist: the same instruction (a branch to the mapped target) at the mapped site
+0xc032ddf0	0xc032dec0	checked	res-custom hook binkernel1: the same instruction (a branch to the mapped target) at the mapped site
+0xc032de70	0xc032df40	checked	res-custom hook binkernel2: the same instruction (a branch to the mapped target) at the mapped site
+0xc06bda3c	0xc06bb58c	checked	res-custom PAIR site: the same movw/movt (or mov) at the mapped site
+0xc06bdb0c	0xc06bb65c	checked	res-custom PAIR site: the same movw/movt (or mov) at the mapped site
+0xc06cb6dc	0xc06c922c	checked	res-custom PAIR site: the same movw/movt (or mov) at the mapped site
+0xc0b59500	0xc0b90ff8	checked	the IMX timing table (res-custom TT; the gyro port read the fp L mode object live: timing 0xC0B90FF8)
+0xc00a87e8	0xc00a4dc0	auto	mapped site 0xc00a87e5 + 3 (res-custom replay)
+0xc00c9bd4	0xc00c637c	auto	mapped site 0xc00c9bd1 + 3 (res-custom replay)
+0xc02dafa4	0xc02df04c	auto	mapped site 0xc02dafa1 + 3 (res-custom replay)
+0xc0306ea4	0xc030af3c	auto	mapped site 0xc0306ea1 + 3 (res-custom replay)
+0xc0306ef0	0xc030af88	auto	mapped site 0xc0306eed + 3 (res-custom replay)
+0xc0326dbc	0xc032c5f4	auto	mapped site 0xc0326db9 + 3 (res-custom replay)
+0xc04a1790	0xc049d9f0	auto	mapped site 0xc04a1789 + 7 (res-custom replay)
+0xc057a6a4	0xc05767bc	auto	mapped site 0xc057a6a1 + 3 (res-custom replay)
+0xc057a6fc	0xc0576814	auto	mapped site 0xc057a6f9 + 3 (res-custom replay)
+0xc05821bc	0xc057e2d4	auto	mapped site 0xc05821b9 + 3 (res-custom replay)
+0xc05824d4	0xc057e5ec	auto	mapped site 0xc05824d1 + 3 (res-custom replay)
+0xc0bd05d4	0xc0bf6820	checked	res-custom MAPPING (profile -> index): the only fp reader (0xC043A184) is the same code at fp L 0xC043991C, loading 0xC0BF6820
+0xc0b5fda4	0xc0b98de0	checked	res-custom REGDESC: the IMX455 register-record descriptor {base 0xC0B98DE8, 85}, records 0x460 bytes (fp 0x288) in the mode table's order
+0xc0be46f0	0xc0cbe16c	checked	the second "MAG4" string, the one the mag hook site loads (fp L loader 0xC043B8E8) (res-custom)
+0xc05e5bec	0xc05e1dcc	checked	the shared menu-file redirect site (uishare fv_handler): the same Thumb code, only a descriptor movw/movt differs (+0xFC50)
+0xc05e5bf1	0xc05e1dd1	auto	that site + 5 (Thumb replay)
+0xc005bb98	0xc00591d0	auto	exact, bytes16 same (res-custom ogc.c)
+0xc005be90	0xc00594c8	auto	exact, bytes16 same (res-custom ogc.c)
+0xc005c058	0xc0059690	auto	exact, bytes16 same (res-custom ogc.c)
+0xc005c0f0	0xc0059728	auto	exact, bytes16 same (res-custom ogc.c)
+0xc00fbde0	0xc00f8680	auto	exact, bytes16 same (res-custom ogc.c)
+0xc01f578c	0xc01f200c	auto	exact, bytes16 same (res-custom ogc.c)
+0xc02073b8	0xc0204090	auto	exact, bytes16 same (res-custom ogc.c)
+0xc0207440	0xc0204118	auto	exact, bytes16 same (res-custom ogc.c)
+0xc0322c70	0xc0326d88	auto	exact, bytes16 same (res-custom ogc.c)
+0xc03a55d0	0xc03a57e8	auto	exact, bytes16 same (res-custom ogc.c)
+0xc0423c88	0xc0423ea0	auto	exact, bytes16 same (res-custom ogc.c)
+0xc0423d28	0xc0423f40	auto	exact, bytes16 same (res-custom ogc.c)
+0xc049ee78	0xc049b0d8	auto	exact, bytes16 same (res-custom ogc.c)
+0xc05663e8	0xc0562500	auto	exact, bytes16 same (res-custom ogc.c)
+0xc0566498	0xc05625b0	auto	exact, bytes16 same (res-custom ogc.c)
+0xc06bda40	0xc06bb590	auto	mapped 0xc06bda3d + 3 (res-custom)
+0xc06bdb10	0xc06bb660	auto	mapped 0xc06bdb0d + 3 (res-custom)
+0xc06cb6e0	0xc06c9230	auto	mapped 0xc06cb6dd + 3 (res-custom)
+0xc3000000	-	const	memory-range bound in ogc.c (the fp L map is the fp's: LOADER_V4.md)
+0xc351ff48	0xc3520d88	verify	RAM, 4 mapped fp loaders vote (res-custom ogc.c)
+0xc358e140	0xc358ef80	verify	RAM, 3 mapped fp loaders vote (res-custom ogc.c)
+0xc37b7254	0xc37b6d1c	verify	RAM, 2 mapped fp loaders vote (res-custom ogc.c)
+0xc4000000	-	const	memory-range bound in ogc.c (the fp L map is the fp's: LOADER_V4.md)
+0xc5000000	-	const	memory-range bound in ogc.c (the fp L map is the fp's: LOADER_V4.md)
+0xc0057ae8	0xc0055120	checked	res-custom GET_OBJ: 24/24 instructions match (branches/constants masked)
+0xc0207188	0xc0203e60	checked	res-custom CAMSCH1: 24/24 instructions match
+0xc038c780	0xc038c998	checked	res-custom: a caller's return address (the code before it matches 24/24)
+0xc0423c48	0xc0423e60	checked	res-custom LV_HOLDER: 24/24 instructions match
+0xc049ec58	0xc049aeb8	checked	res-custom: the exclusion manager, 24/24 instructions match
+0xc2e40224	0xc2e4fe9c	checked	res-custom RATE_PAIRS_STOCK: the same 10 {internal, row} pairs
+0xc2e44ee4	0xc2e54b5c	checked	res-custom SUM_PAIRS_STOCK: the same 9 {export, summary} pairs
+0xc347d1d4	0xc347dfe8	verify	res-custom MOV_SELECTOR: one mapped fp loader votes
+0xc358dba4	0xc358e9e4	verify	res-custom: a header-DMA {n, src} pair, one mapped loader votes (with +4)
+0xc358dba8	0xc358e9e8	verify	res-custom: the +4 of that pair
+0xc347e08f	0xc347eea3	verify	res-custom MOVREC_DEFAULT, the movie-recording flag (movie object +0x157): one loader, the same +0xE14 as MOV_SELECTOR; confirm on the camera while recording
+0xc3476609	0xc347741d	verify	res-custom MOVREC_SEL21 (selector 0x21's recording flag): one loader, +0xE14 as its neighbours; confirm on the camera
+0xc35a952c	0xc35aa36c	verify	res-custom MOV_ACTIVE: INFERRED from its block's shift (+0xE40: 0xC351FF48, 0xC358DBA4/A8, 0xC358E140 voted); confirm on the camera while recording
+0xc043bc68	0xc043bf60	verify	playback key builder (fp FUN_c043bc68, mode 5): same template copy + one vtable+0xC call; fp L 0xC043BF60 by structure (res-custom KEYBLD)
+0xc043bcbc	0xc043bfb4	verify	the playback key builder's return from the resolution-name emitter (res-custom ogc.c KEYBLD: the name hook leaves lookup keys stock)
+0xc0be477c	0xc0cbe218	verify	the playback key template (16 bytes) the key builder copies

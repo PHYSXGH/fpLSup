@@ -15,7 +15,14 @@ numbers.
 import os
 import struct
 
-LAYOUT0 = 0xC0730000          # the coordinate origin (og_pic.inc OG_CAVE0)
+# The camera FPSUP_CAMERA names (fp_usb_shell/fwtarget.py): 'fp' (default) or 'fpl'.
+# The addresses below stay the fp's; the C and assembly builds map them
+# (fwtarget.translate_c / armasm), the builder maps what it writes itself.
+CAMERA = (os.environ.get('FPSUP_CAMERA', 'fp').strip().lower() or 'fp')
+FPL = CAMERA == 'fpl'
+
+LAYOUT0 = 0xC0730000          # the coordinate origin (og_pic.inc OG_CAVE0) -- not an address:
+                              # the header spells it in decimal so no address map touches it
 # Diagnostic build (env OGC_HOOKCNT=1): every hook site enters through a counting
 # stub (hookcnt[i] += 1) appended to the shims; the shims' window grows to hold them.
 HOOKCNT = os.environ.get('OGC_HOOKCNT') == '1'
@@ -167,11 +174,22 @@ PREV_GROUP_PIDS = (5, 210, 227, 257, 258, 259)     # v1 files: prev_h becomes th
 # the virtual profile ids: empty mapping slots in FUN_c043a1c8's class 0 (41..100), rows first
 VPID_POOL = [74, 75, 76, 77, 78, 79, 47, 48, 49, 50, 52, 54, 55, 56, 57, 58, 59, 60, 62, 64,
              65, 66, 67, 68, 69, 70, 72, 80, 87, 88, 89, 90]
+# fp L (PROVISIONAL, projects/fpl-port/RESCUSTOM_PORT.md): its classifier (0xC0439F70) puts 1..33,
+# 51..83, 101..989, 1771..1838, 1841..1978, 2001..2989 in classes; empty mapping slots outside them
+# (and <= 0x200) are 34..50, 84..90, 97..100 -- 28, so MAX_VARS is 28 there.  Whether class 0 suits a
+# virtual CinemaDNG profile on the fp L is phase 3.
+PROFILE_CLASSES = (((1, 33), (51, 83), (101, 989), (1771, 1838), (1841, 1978), (2001, 2989)) if FPL else
+                   ((0, 4), (5, 11), (17, 40), (101, 129), (131, 198), (301, 312), (401, 434)))
+if FPL:
+    VPID_POOL = list(range(34, 51)) + list(range(84, 91)) + list(range(97, 101))
+    MAX_VARS = len(VPID_POOL)
 # ---- a virtual mode -----------------------------------------------------------
 # Seven per-mode tables (design §3.2.1): kind, descriptor field (base, count), stride.
 TABLES = [('TIM', 0x00, 0x04, 0x20), ('META', 0x08, 0x0C, 100), ('R28', 0x24, 0x28, 0x28),
           ('R38', 0x40, 0x44, 0x38), ('R14', 0x48, 0x4C, 0x14), ('R68', 0xF4, 0xF8, 0x68),
-          ('REG', 0x00, 0x04, 0x288)]          # REG: the register descriptor (0xC0B5FDA4)
+          ('REG', 0x00, 0x04, 0x460 if FPL else 0x288)]   # REG: the register descriptor (0xC0B5FDA4);
+# fp L: REG records are 0x460 bytes (IMX455, projects/fpl-port/RESCUSTOM_PORT.md).  R28/R38/R14/R68
+# keep the IMX410's strides, unverified on the fp L: they only matter when a virtual mode is cloned.
 VM = dict(ID=0x00, DONOR=0x04, FILLED=0x08, REGFILLED=0x0C, ZFILLED=0x10,
           TW0=0x14, TW1=0x18, NOM=0x1C,      # the last picker hit's timing / nominal fps
           PTR=0x20,                          # 7 row pointers (absolute, set when filled)
@@ -236,6 +254,8 @@ PREV_PROFILES = (5, 210, 227, 257, 258, 259)
 CLAMP = ((0x04, 0x00000008), (0x18, 0x0000C000))   # the video clamp bits in the R38 row
 ENUM_RES_BASE = 0x4D4E4500    # uishare ui/enums.py UIS_RES_ENUM_BASE
 VPID0, VMID0 = 74, 230        # empty mapping slots 74..79 (class 0, like p83/p13); free mode ids 230..245
+if FPL:
+    VPID0 = VPID_POOL[0]       # 34..39 (provisional, above); mode ids 230.. are free on the fp L too (IMX455 ids <= 217)
 
 # ---- C entry points (S.FN + 4*i) and hook slots (S.NEXT + 4*i) ----------------
 FNS = ['PICK', 'SEL', 'FMT', 'CANVAS', 'NAME', 'OUT', 'VLOOK', 'V32', 'AC38', 'FPS', 'CMT', 'SAVE',
@@ -298,6 +318,18 @@ HOOKS = [  # name, site, kind, replay ('' = BL site through its own target / non
     ('bitclass', 0xC04A13E4, 'b'),        # native quality exclusion provider's result
     ('bitnorm', 0xC00A7FFC, 'b'),         # native quality normalizer's result
 ]
+NATIVE_SITES = set()   # hooks whose site is the target camera's own address (not mapped)
+if FPL:
+    # Not on the fp L: v32 and binpath are empty stubs in the IMX455 class and never called
+    # (camera counters, 2026-11-04).  The picker is a different design there: the recording
+    # key builder FUN_c043ba20 calls one lookup per bit depth on the crop step's descriptor
+    # (projects/fpl-port/RESCUSTOM_PORT.md), so the fp's one picker hook becomes its three
+    # call sites (bl: r0 = the descriptor slot, r1 = the key, r6 = the request, [r6+0x48] =
+    # the crop factor x 100).  fp L addresses: the fp has no such sites.
+    HOOKS = [h for h in HOOKS if h[0] not in ('v32', 'binpath', 'picker')]
+    PICKS = [('pick8', 0xC043BAB0, 'bl'), ('pick10', 0xC043BAE4, 'bl'), ('pick12', 0xC043BB10, 'bl')]
+    HOOKS += PICKS
+    NATIVE_SITES = {n for n, _, _ in PICKS}
 RFLAG_CLAMP, RFLAG_MAG8, RFLAG_CROP = 1, 2, 4
 # the virtual frame rates, core-defined (rcd entries only say which ones they time):
 # rank (fps x 100), the stock internal it rides on, that rate's export (summary)
@@ -452,7 +484,12 @@ def header():
     for n, i in HOOK_INDEX.items():
         d[f'NX_{n.upper()}'] = S['NEXT'] + 4 * i
     for k, v in d.items():
-        out.append(f'#define {k} 0x{v:X}')
+        if k in ('OGC_LAYOUT0', 'OGC_S_COORD'):     # coordinates: decimal, never address-mapped
+            out.append(f'#define {k} {v}')
+        else:
+            out.append(f'#define {k} 0x{v:X}')
+    if FPL:
+        out.append('#define OGC_FPL 1')
     out.append('#endif')
     return '\n'.join(out) + '\n'
 

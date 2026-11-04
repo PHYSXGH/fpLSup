@@ -26,32 +26,37 @@ sys.path.insert(0, str(ROOT / 'research/ui/tools'))
 import nbu_format as N
 import native_ui_audit as A
 
-BASE, POOL_START, POOL_SIZE = 0xC0000000, 0xC18C0474, 0x2B018
+try:            # the camera FPSUP_CAMERA names: the fp's UI-data addresses, mapped (fwtarget)
+    from fwtarget import fw as _fw
+except ImportError:                                       # pragma: no cover
+    def _fw(a):
+        return a
+BASE, POOL_START, POOL_SIZE = 0xC0000000, _fw(0xC18C0474), 0x2B018
 LABELS = ('23.98', '24', '25', '29.97', '48', '50', '59.94', '100', '119.88', '240', '15')
 LABEL_OFFSETS = (0x473C, 0x47A8, 0x4894, 0x4ACC, 0x53BC, 0x54CC, 0x5614,
                  0x21D4, 0x29EC, 0x47B4, 0x3400)
 TIMES = (0, 33, 66, 100, 133, 166, 200, 233, 266, 300, 333)
 SETS = (
-    dict(name='LV_CINE_LARGE', start=0xC1E0A87E, end=0xC1E59DAA,
+    dict(name='LV_CINE_LARGE', start=_fw(0xC1E0A87E), end=_fw(0xC1E59DAA),
          sha='512397247faa384a52085aa34eb99ba00f9b92d5753a188e876f792a31f65be2',
-         owner=7356, draw=0xC1E40075, clip=0xC1E400A9, group=0xC1E4021D,
+         owner=7356, draw=_fw(0xC1E40075), clip=_fw(0xC1E400A9), group=_fw(0xC1E4021D),
          images=325, texts=29, properties=2, width=164, height=43, shrink=67,
-         font_donor=0xC1E49188, font_size=31, key_budgets=15, font_mask=0x40000014),
-    dict(name='LV_CINE_MEDIUM', start=0xC1E59DAA, end=0xC1EAA1ED,
+         font_donor=_fw(0xC1E49188), font_size=31, key_budgets=15, font_mask=0x40000014),
+    dict(name='LV_CINE_MEDIUM', start=_fw(0xC1E59DAA), end=_fw(0xC1EAA1ED),
          sha='9e460497a3baabcdc8b2cd7a86fe5bb4148797d2796d7ad3137eb8c36463e58d',
-         owner=926, draw=0xC1E8E924, clip=0xC1E8E95C, group=0xC1E8EB48,
+         owner=926, draw=_fw(0xC1E8E924), clip=_fw(0xC1E8E95C), group=_fw(0xC1E8EB48),
          images=324, texts=29, properties=3, width=152, height=35, shrink=161,
-         font_donor=0xC1E99617, font_size=25, key_budgets=19, font_mask=0x40000014),
-    dict(name='LV_STILLlike_LARGE', start=0xC1F69EAE, end=0xC1FB9B35,
+         font_donor=_fw(0xC1E99617), font_size=25, key_budgets=19, font_mask=0x40000014),
+    dict(name='LV_STILLlike_LARGE', start=_fw(0xC1F69EAE), end=_fw(0xC1FB9B35),
          sha='6b338994dc0861a093a269d9f261c5c43ebdbcee47de7d69e7acb5390d788689',
-         owner=6324, draw=0xC1FA3E4B, clip=0xC1FA3E7F, group=0xC1FA4097,
+         owner=6324, draw=_fw(0xC1FA3E4B), clip=_fw(0xC1FA3E7F), group=_fw(0xC1FA4097),
          images=331, texts=28, properties=2, width=164, height=43, shrink=67,
-         font_donor=0xC1FA900E, font_size=31, key_budgets=15, font_mask=0x40000004),
-    dict(name='LV_STILLlike_MEDIUM', start=0xC1FB9B35, end=0xC200D526,
+         font_donor=_fw(0xC1FA900E), font_size=31, key_budgets=15, font_mask=0x40000004),
+    dict(name='LV_STILLlike_MEDIUM', start=_fw(0xC1FB9B35), end=_fw(0xC200D526),
          sha='baf2690376fec332711ff1623e012ca5ec94ea2744dd9952493a4323aa524ae8',
-         owner=926, draw=0xC1FF7A23, clip=0xC1FF7A5B, group=0xC1FF7C73,
+         owner=926, draw=_fw(0xC1FF7A23), clip=_fw(0xC1FF7A5B), group=_fw(0xC1FF7C73),
          images=358, texts=28, properties=2, width=152, height=35, shrink=71,
-         font_donor=0xC1FFC9E0, font_size=25, key_budgets=18, font_mask=0x40000004),
+         font_donor=_fw(0xC1FFC9E0), font_size=25, key_budgets=18, font_mask=0x40000004),
 )
 SET_SPANS = tuple(dict(name=s['name'], start=s['start'] & ~3,
                       end=(s['end']+3) & ~3) for s in SETS)
@@ -294,15 +299,15 @@ def _verify_native_curve_and_text(p, keys):
     """
     from unicorn.arm_const import UC_ARM_REG_S0
     real = (
-        (0xC05E2738, 0xC05E2776), (0xC05D7430, 0xC05D745C),
-        (0xC05E28B8, 0xC05E2900), (0xC05D74D8, 0xC05D7534),
-        (0xC05EDB08, 0xC05EDB10), (0xC05EDB38, 0xC05EDB3E),
-        (0xC05E2280, 0xC05E2324), (0xC05E2970, 0xC05E2988),
-        (0xC05D6990, 0xC05D6BA0), (0xC05D6BB8, 0xC05D6BE0),
-        (0xC05D5670, 0xC05D56F2), (0xC05D54C8, 0xC05D5534),
-        (0xC05EC910, 0xC05EC956), (0xC05D6FC0, 0xC05D6FC6),
-        (0xC05FE518, 0xC05FE51C), (0xC05FE308, 0xC05FE318),
-        (0xC05FDA20, 0xC05FDA38), (0xC05D7148, 0xC05D7160),
+        (_fw(0xC05E2738), _fw(0xC05E2776)), (_fw(0xC05D7430), _fw(0xC05D745C)),
+        (_fw(0xC05E28B8), _fw(0xC05E2900)), (_fw(0xC05D74D8), _fw(0xC05D7534)),
+        (_fw(0xC05EDB08), _fw(0xC05EDB10)), (_fw(0xC05EDB38), _fw(0xC05EDB3E)),
+        (_fw(0xC05E2280), _fw(0xC05E2324)), (_fw(0xC05E2970), _fw(0xC05E2988)),
+        (_fw(0xC05D6990), _fw(0xC05D6BA0)), (_fw(0xC05D6BB8), _fw(0xC05D6BE0)),
+        (_fw(0xC05D5670), _fw(0xC05D56F2)), (_fw(0xC05D54C8), _fw(0xC05D5534)),
+        (_fw(0xC05EC910), _fw(0xC05EC956)), (_fw(0xC05D6FC0), _fw(0xC05D6FC6)),
+        (_fw(0xC05FE518), _fw(0xC05FE51C)), (_fw(0xC05FE308), _fw(0xC05FE318)),
+        (_fw(0xC05FDA20), _fw(0xC05FDA38)), (_fw(0xC05D7148), _fw(0xC05D7160)),
     )
     for lo, hi in real:
         p.allow(lo, hi, 'stock curve/drawText implementation')
@@ -315,13 +320,13 @@ def _verify_native_curve_and_text(p, keys):
         pointer = probe._allocate(len(data))
         probe.write(pointer, data)
         return pointer
-    p.stub(0xC01F82CC, 'exact small timestamp int64-to-float', handler=convert)
-    p.stub(0xC05D9B40, 'allocator string duplication', handler=duplicate)
-    p.stub(0xC05D9D18, 'empty external property registry')
-    p.stub(0xC05D9B80, 'allocator string release')
+    p.stub(_fw(0xC01F82CC), 'exact small timestamp int64-to-float', handler=convert)
+    p.stub(_fw(0xC05D9B40), 'allocator string duplication', handler=duplicate)
+    p.stub(_fw(0xC05D9D18), 'empty external property registry')
+    p.stub(_fw(0xC05D9B80), 'allocator string release')
     # Use a fresh bounded arena for this independent native component probe.
     out, state = p._allocate(4), p._allocate(0x40)
-    if p._call(0xC05E2738, p.ALLOCATOR, 2, len(keys), out):
+    if p._call(_fw(0xC05E2738), p.ALLOCATOR, 2, len(keys), out):
         raise ValueError('native string curve allocation failed')
     curve = p.words(out)[0]
     if p.words(curve+0x10, 2) != (0, len(keys)):
@@ -330,7 +335,7 @@ def _verify_native_curve_and_text(p, keys):
         pointer = p._allocate(0x34)
         p.write(pointer, struct.pack('<Q', key['time']))
         p.write_words(pointer+8, 1, 0, p.ALLOCATOR, 0, POOL_START+key['value'])
-        if p._call(0xC05E28C8, curve, pointer):
+        if p._call(_fw(0xC05E28C8), curve, pointer):
             raise ValueError('native string key append failed')
     if p.words(curve+0x10, 2) != (len(keys), len(keys)):
         raise ValueError('native curve did not receive all installed keys')
@@ -338,33 +343,33 @@ def _verify_native_curve_and_text(p, keys):
     indexes, data, private = p._allocate(0x100), p._allocate(0x400), p._allocate(0x100)
     p.write_words(component, context)
     p.write_words(context+0xC, p.ALLOCATOR)
-    p.write_words(component+0x10, 0xC2E03A14, 32, 0xC2E035AC, indexes, data)
+    p.write_words(component+0x10, _fw(0xC2E03A14), 32, _fw(0xC2E035AC), indexes, data)
     p.write_words(component+0x34, private)
     labels = []
     # Exact endpoints and points between them exercise native step selection.
     for time, expected in [(t, s) for t, s in zip(TIMES, LABELS)] + [(316, '240'), (334, '15')]:
         p.write(state+0x1C, struct.pack('<f', time))
-        value = p._call(0xC05E2970, curve, state)
+        value = p._call(_fw(0xC05E2970), curve, state)
         if p.string(value) != expected:
             raise ValueError('native text curve selected the wrong frame-rate key')
-        p._call(0xC05D6BB8, component, 0, value)
+        p._call(_fw(0xC05D6BB8), component, 0, value)
         stored = p.words(data)[0]
         if p.string(stored) != expected or not p.words(private+8)[0] & 1 or p.words(data+8)[0] != 0:
             raise ValueError('native drawText setter did not store/dirty literal label')
         labels.append((time, p.string(stored)))
-    if any(c.address in (0xC05EC220, 0xC05EC478) for c in p.calls):
+    if any(c.address in (_fw(0xC05EC220), _fw(0xC05EC478)) for c in p.calls):
         raise ValueError('numeric LV label unexpectedly used localization resolver')
     # Positive control proves the same real setter can detect and route markup;
     # numeric labels above must never reach either resolver service.
     marker = p._allocate(32)
     p.write(marker, b'<!positive-control>\0')
     resolver = p._allocate(32)
-    p.stub(0xC05EC220, 'positive-control resolver creation', ret=resolver)
-    p.stub(0xC05EC478, 'positive-control resolver assignment')
+    p.stub(_fw(0xC05EC220), 'positive-control resolver creation', ret=resolver)
+    p.stub(_fw(0xC05EC478), 'positive-control resolver assignment')
     before = len(p.calls)
-    p._call(0xC05D6BB8, component, 0, marker)
-    calls = [c.address for c in p.calls[before:] if c.address in (0xC05EC220, 0xC05EC478)]
-    if calls != [0xC05EC220, 0xC05EC478] or p.words(data+12)[0] != resolver:
+    p._call(_fw(0xC05D6BB8), component, 0, marker)
+    calls = [c.address for c in p.calls[before:] if c.address in (_fw(0xC05EC220), _fw(0xC05EC478))]
+    if calls != [_fw(0xC05EC220), _fw(0xC05EC478)] or p.words(data+12)[0] != resolver:
         raise ValueError('native literal/markup positive control failed')
     return labels
 
@@ -379,16 +384,16 @@ def _verify_native_clip(image, clip, semantic_length):
     from unicorn import UC_HOOK_CODE
     from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_R1
     p = P.NbuProbe(image[:P.SEG0_SIZE]); p.install_arena()
-    p.allow(0xC05E5F10,0xC05E5F1E,'native object id converter')
+    p.allow(_fw(0xC05E5F10),_fw(0xC05E5F1E),'native object id converter')
     component, owner, klass = [p._allocate(0x80) for _ in range(3)]
-    p.stub(0xC05D9E80,'known animation clip class lookup',ret=klass)
-    p.stub(0xC05E82A0,'known existing owner lookup',ret=owner)
+    p.stub(_fw(0xC05D9E80),'known animation clip class lookup',ret=klass)
+    p.stub(_fw(0xC05E82A0),'known existing owner lookup',ret=owner)
     def create(q,args):
         out=q.words(q.uc.reg_read(UC_ARM_REG_SP)+4)[0]
         q.write_words(out,component)
         return 0
-    p.stub(0xC05D5968,'bounded clip component constructor',handler=create)
-    for a in (0xC05D5DB8,0xC05E1A58,0xC05E2798,0xC05D1490,0xC05D5D08,0xC05EDB10):
+    p.stub(_fw(0xC05D5968),'bounded clip component constructor',handler=create)
+    for a in (_fw(0xC05D5DB8),_fw(0xC05E1A58),_fw(0xC05E2798),_fw(0xC05D1490),_fw(0xC05D5D08),_fw(0xC05EDB10)):
         p.stub(a,'component/curve ownership service')
     curves, strings, skips = {}, [], []
     def curve(q,args):
@@ -397,18 +402,18 @@ def _verify_native_clip(image, clip, semantic_length):
         q.write_words(args[3],addr)
         curves[addr]={'kind':args[1],'capacity':args[2],'keys':[]}
         return 0
-    p.stub(0xC05E2738,'bounded curve storage constructor',handler=curve)
-    p.stub(0xC05EDB90,'bounded native key storage',handler=lambda q,a:q._allocate(0x40))
+    p.stub(_fw(0xC05E2738),'bounded curve storage constructor',handler=curve)
+    p.stub(_fw(0xC05EDB90),'bounded native key storage',handler=lambda q,a:q._allocate(0x40))
     def string(q,args):
         q.write_words(args[0]+0x18,args[1]);strings.append(q.string(args[1]));return 0
-    p.stub(0xC05EDBE8,'string ownership storage',handler=string)
+    p.stub(_fw(0xC05EDBE8),'string ownership storage',handler=string)
     def append(q,args):
         curves[args[0]]['keys'].append(q.words(args[1],13));return 0
-    p.stub(0xC05E28C8,'curve key storage append',handler=append)
+    p.stub(_fw(0xC05E28C8),'curve key storage append',handler=append)
     def attach(q,args):
         curves[args[1]].update(component=args[2],property=q.string(args[3]));return 0
-    p.stub(0xC05E1C28,'attach parsed curve to component',handler=attach)
-    p.open(blob=clip,magic=False,cursor=0,pool=(0x2B018,0xC18C0474),owner=True)
+    p.stub(_fw(0xC05E1C28),'attach parsed curve to component',handler=attach)
+    p.open(blob=clip,magic=False,cursor=0,pool=(0x2B018,_fw(0xC18C0474)),owner=True)
     p.write_words(p.OWNER+0xC,p.ALLOCATOR)
     def capture(uc,a,size,_):
         if a==P.SKIP:

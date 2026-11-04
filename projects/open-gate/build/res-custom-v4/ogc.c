@@ -75,10 +75,17 @@ struct ogc_tab {
 };
 
 /* firmware */
+#ifndef OGC_FPL
 #define TAB1 0xC0BE5810u        /* picker, eRawBitType 4 =  8-bit */
 #define TAB2 0xC0BE59B0u        /* 3 = 10-bit */
 #define TAB3 0xC0BE5B50u        /* else 12-bit */
-#define KEYBLD 0xC043BCBCu      /* the name emitter's caller that builds lookup keys */
+#else                           /* fp L: no such tables; the picker is off (ogc_layout.HOOKS) */
+#define TAB1 1u
+#define TAB2 2u
+#define TAB3 3u
+#endif
+#define KEYBLD 0xC043BCBCu      /* the name emitter's caller that builds lookup keys (playback;
+                                   fp L 0xC043BFB4 through the address table) */
 #define EMIT 0xC01F578Cu        /* (out, string, 15) */
 #define SENSOR_W 0xC0322C70u    /* (register, value) */
 #define GET_OBJ 0xC0057AE8u
@@ -920,7 +927,22 @@ static int key_eq(u32 ek, u32 key, u32 n)
     return n < 16 ? B8(ek + n) == 0 : 1;
 }
 
+#ifdef OGC_FPL
+/* fp L: the key carries no "CROP"; a Crop Mode format's twin is "<key>CROP" */
+static int key_eq_crop(u32 ek, u32 key, u32 n)
+{
+    if (n + 4 > 16) return 0;
+    for (u32 i = 0; i < n; i++) if (B8(ek + i) != B8(key + i)) return 0;
+    if (B8(ek + n) != 'C' || B8(ek + n + 1) != 'R' || B8(ek + n + 2) != 'O' || B8(ek + n + 3) != 'P')
+        return 0;
+    return n + 4 < 16 ? B8(ek + n + 4) == 0 : 1;
+}
+
+/* crop100: the request's crop factor x 100 (100 = off), read by the shim */
+u32 ogc_pick(u8 *S, u32 table, u32 key, u32 crop100)
+#else
 u32 ogc_pick(u8 *S, u32 table, u32 key)
+#endif
 {
     u32 bd;
     if (table == TAB3) bd = BD12;
@@ -929,9 +951,14 @@ u32 ogc_pick(u8 *S, u32 table, u32 key)
     else return 0;
     u32 klen = 0;
     while (klen < 16 && B8(key + klen)) klen++;
+#ifdef OGC_FPL
+    /* PROVISIONAL (port phase 3): every crop step above 1.00x counts as Crop Mode */
+    u32 crop = crop100 != 100u;
+#else
     /* "...CROP": the key of a Crop Mode recording (FUN_c043b828 appends it) */
     u32 crop = klen > 4 && B8(key + klen - 4) == 'C' && B8(key + klen - 3) == 'R'
                && B8(key + klen - 2) == 'O' && B8(key + klen - 1) == 'P';
+#endif
     for (u32 pass = 0, i = 0; pass < 2; i++) {
         if (i == SW(S, S_NENT)) { pass++; i = 0xFFFFFFFFu; continue; }
         u32 e = entp(S, i), row = rowp(S, W(e + ENT_ROW));
@@ -939,8 +966,13 @@ u32 ogc_pick(u8 *S, u32 table, u32 key)
         /* pass 0: the entries of the virtual rate now chosen; pass 1: the plain ones */
         if (W(e + ENT_VRATE) != (pass ? 0u : SW(S, S_VRATE)) || (!pass && !SW(S, S_VRATE))) continue;
         /* a format without Crop Mode records its plain entry for a CROP key */
+#ifdef OGC_FPL
+        if (crop && (W(row + ROW_RFLAGS) & RFLAG_CROP) ? !key_eq_crop(e + ENT_KEY, key, klen)
+                                                       : !key_eq(e + ENT_KEY, key, klen)) continue;
+#else
         u32 n = crop && !(W(row + ROW_RFLAGS) & RFLAG_CROP) ? klen - 4 : klen;
         if (!key_eq(e + ENT_KEY, key, n)) continue;
+#endif
         u32 mask = W(row + ROW_BITMASK);
         if (mask && !(mask & bit_flag(bd))) continue;
         SW(S, S_BITLATCH) = bd;
@@ -1055,7 +1087,11 @@ u32 ogc_gate(u8 *S, u32 kind, u32 v)
         return best;
     }
     case G_MAG:                 /* the 4x magnifier's key: MAG8 for a narrow 1:1 window (S16) */
+#ifdef OGC_FPL
+        return fl & RFLAG_MAG8 ? v + 8u : v;          /* MAG8 follows MAG4 (fp L 0xC0CBE16C) */
+#else
         return fl & RFLAG_MAG8 ? 0x46F8u : v;
+#endif
     }
     return v;
 }

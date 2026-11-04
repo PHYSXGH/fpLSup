@@ -318,8 +318,31 @@ def record_tables(plans: list[dict], firmware: bytes) -> tuple[str, dict]:
     }
 
 
+
+def _font(kind):
+    """A font file for rendered tiles.  The builds were made on macOS; on another
+    system the env var (FPSUP_FONT_NARROW_BOLD / FPSUP_FONT_HELVETICA) names the
+    real file, else the URW metric-compatible stand-in is used -- the tiles then
+    differ from a Mac build byte for byte (projects/fpl-port/RESCUSTOM_PORT.md)."""
+    import os, sys
+    mac = {'narrow-bold': '/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf',
+           'helvetica': '/System/Library/Fonts/Helvetica.ttc'}[kind]
+    env = os.environ.get({'narrow-bold': 'FPSUP_FONT_NARROW_BOLD', 'helvetica': 'FPSUP_FONT_HELVETICA'}[kind])
+    if env:
+        return env
+    if os.path.exists(mac):
+        return mac
+    sub = {'narrow-bold': '/usr/share/fonts/urw-base35/NimbusSansNarrow-Bold.otf',
+           'helvetica': '/usr/share/fonts/urw-base35/NimbusSans-Regular.otf'}[kind]
+    if os.path.exists(sub):
+        if not getattr(_font, 'said', set()) >= {kind}:
+            print(f'note: {mac} not found; using {sub} (tiles differ from a macOS build)', file=sys.stderr)
+            _font.said = getattr(_font, 'said', set()) | {kind}
+        return sub
+    return mac
+
 def _hud_tile(text, width, height, cap=28, ink=81, ring=3,
-              font="/System/Library/Fonts/Helvetica.ttc"):
+              font=None):
     """算繪一張原廠 HUD 樣式的數字圖塊:白字、不透明黑邊,**ARGB4444**。
 
     ★ 像素格式不是 (亮度, alpha),也不是 RGB565,是 **ARGB4444**。
@@ -348,7 +371,7 @@ def _hud_tile(text, width, height, cap=28, ink=81, ring=3,
     from PIL import Image, ImageDraw, ImageFont
     ss = 8
     for size in range(96, 8, -1):
-        f = ImageFont.truetype(font, size * ss)
+        f = ImageFont.truetype(font or _font('helvetica'), size * ss)
         big = Image.new("L", (width * ss, height * ss), 0)
         ImageDraw.Draw(big).text((width * ss // 2, height * ss // 2), text,
                                  font=f, fill=255, anchor="mm")
@@ -414,7 +437,7 @@ def assets(out: Path, names: dict | None = None) -> tuple[bytes, list[dict]]:
         if resname.encode() + b"\0" in firmware:
             continue
         definitions.append((resname, 88, 38, 28, None, str(value),
-                            "/System/Library/Fonts/Helvetica.ttc"))
+                            _font("helvetica")))
 
     for name, width, height, cap, source, text, font in definitions:
         if source is None:

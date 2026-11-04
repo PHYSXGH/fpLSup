@@ -9,7 +9,17 @@
 #include <stdint.h>
 #define VRC_MAGIC 0x31435256u
 #define VRC_ABI 2u
+#ifndef OGC_FPL
 #define VRC_PICKER 0xC043CCF8u
+#else
+/* fp L: the last hook, pick12 (the 12-bit lookup's call site 0xC043BB10, a bl; decimal:
+ * already the fp L's address, not mapped again).  ogc.c's veneer order puts it last. */
+#define VRC_PICKER 3225664272u
+#define VRC_BRANCH 0xeb000000u
+#endif
+#ifndef VRC_BRANCH
+#define VRC_BRANCH 0xea000000u
+#endif
 #define VRC_MAX_PROVIDERS 16u
 #define VRC_MAX_PACKS 32u
 #define VRC_ASSET_BYTES 0x400000u
@@ -37,7 +47,7 @@ struct vrc_endpoint { uint32_t magic, abi; vrc_dispatch_fn dispatch; uintptr_t c
  * unrelated picker never gets treated as a service pointer. */
 static inline const struct vrc_endpoint *vrc_find(uintptr_t first,uintptr_t end) {
     uint32_t w=*(volatile const uint32_t *)VRC_PICKER;
-    if ((w & 0xff000000u)!=0xea000000u) return 0;
+    if ((w & 0xff000000u)!=VRC_BRANCH) return 0;
     int32_t d=(int32_t)(w<<8)>>6;
     uintptr_t p=VRC_PICKER+8u+d;
     if (p<first || p+24u>end || (p&7u) ||

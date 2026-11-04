@@ -14,8 +14,15 @@ L, rcd, T = C.L, C.rcd, C.T
 CLASS_SITE, NORM_SITE = 0xC04A13E4, 0xC00A7FFC
 ENUM = {8: 4, 10: 3, 12: 0}
 
+def setUpModule():
+    import ogc_layout
+    if ogc_layout.FPL:
+        raise unittest.SkipTest('fp-only (the fp\'s camera model and IMX410 formats); '
+                                'test_fpl_rescustom covers the fp L build')
+
 
 class BitPolicyTests(unittest.TestCase):
+    NAME, HL = C.CoreTests.NAME, C.CoreTests.HL
     setUpClass = classmethod(C.CoreTests.setUpClass.__func__)
     # Reuse the maintained loader/consumer fixture without inheriting its tests.
     decoded = classmethod(C.CoreTests.decoded.__func__)

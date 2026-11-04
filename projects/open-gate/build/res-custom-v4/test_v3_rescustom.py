@@ -119,6 +119,12 @@ def thumb_bw(site, to):
     hw2 = 0x9000 | j1 << 13 | j2 << 11 | ((off >> 1) & 0x7FF)
     return hw1 | hw2 << 16
 
+def setUpModule():
+    import ogc_layout
+    if ogc_layout.FPL:
+        raise unittest.SkipTest('fp-only (the fp\'s camera model and IMX410 formats); '
+                                'test_fpl_rescustom covers the fp L build')
+
 
 class Cam(T.Camera):
     def __init__(self, files, dirs, core_facts, fmt=CINEMADNG, res=2, csv_rows=2, uia_fail=(),

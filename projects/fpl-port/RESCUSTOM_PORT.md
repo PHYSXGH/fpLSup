@@ -91,7 +91,7 @@ fp L's key composition and the meaning of the id, then serve our formats' entrie
 | found by pattern / correspondence (`verify`) | canvas, vpro, save, mag |
 | found, needs a shim change | angtv (`#:lower16:`) |
 | not needed on the fp L (never called) | v32, binpath |
-| redesign (different data model) | picker |
+| redesigned: three `bl` hooks pick8 / pick10 / pick12 | picker |
 
 Code changes for the fp L besides addresses: angtv's replay; ogc.c's G_MAG constant (return v + 8); leave out
 v32/binpath; the picker.
@@ -140,3 +140,61 @@ own keys ("…EIS"); DCI4K has its own table (+0x40).
 
 For res-custom: the picker hook goes on the three lookups (each with its bit depth), returns entries in this
 layout (sensor mode in the third word: the virtual mode's id), and the "crop" test becomes the crop step.
+
+## The build (2026-11-04)
+
+`FPSUP_CAMERA=fpl python3 -B build_v4_rescustom.py --out DIR` builds the core for the fp L
+(RES-Custom_v0.1.5.BIN, 321,728 B, no format files); the fp build is unchanged (sha 7b575c72…).
+
+- C: preprocessed, then `fwtarget.translate_c` maps the 0xC… constants; `-D` hex values go in decimal so
+  nothing is mapped twice; LAYOUT0 / S_COORD (our own coordinates) are written in decimal for the same reason.
+- Shims: armasm maps them; `OGC_FPL` leaves out binpath, picker, v32 and switches mag / angtv.
+- Claims: 62 = the fp's 62 less picker, v32, binpath, plus pick8 / pick10 / pick12; each at fw(fp site) (the picks
+  at their own fp L sites, `ogc_layout.NATIVE_SITES`) with the fp L image's stock word.
+- Formats: none. The five (og3k, og2k, s16, og35k, og4k) borrow IMX410 sensor modes; rcd.decode refuses them
+  against the fp L's mode table (ENTRY), so `FORMATS` is empty on the fp L until phase 3.
+- Emulated (test_v4's harness, the real Loader v4): the core runs, logs OCD / OCR with no files and releases
+  itself, as the fp core does. The full emulated suite (test_v3/v4_rescustom) is fp-only: its camera model
+  holds ~125 fp addresses and a mode descriptor built from the IMX410 tables; porting it needs fp L formats.
+
+## The picker, done (static, 2026-11-04)
+
+The fp L recording key builder FUN_c043ba20 is the only caller of the three lookups, so the hooks go on its
+three `bl` sites rather than the lookups' entries (no replay; at the call r5 = obj, r6 = the request):
+
+| hook | site | stock | bit depth |
+|---|---|---|---|
+| pick8 | 0xC043BAB0 | `bl 0xC043D0A8` | 8 (TAB code 1) |
+| pick10 | 0xC043BAE4 | `bl 0xC043D108` | 10 (2) |
+| pick12 | 0xC043BB10 | `bl 0xC043CE68` | 12 (3) |
+
+Each shim calls ogc_pick(S, bit code, key, `[r6+0x48]` = crop factor x 100); ours -> our entry (the
+firmware's 16-byte layout, as on the fp), else down to the stock lookup with r0 / r1 untouched. They are
+patched last, as the fp's picker was; pick12's veneer is the last one, so `VRC_PICKER` (RES-Lab's way to
+the virtual-RCD endpoint) is 0xC043BB10 on the fp L and `vrc_find` accepts a `bl` there.
+
+Crop: the fp L key never ends in "CROP". ogc_pick takes Crop Mode as "crop step above 1.00x"
+(**provisional**, phase 3: the fp L's 33 steps change the sensor mode at 1.37x and 2.00x) and then matches a
+Crop Mode format's twin entry as key + "CROP".
+
+**KEYBLD.** The name hook leaves the *playback* key builder's key stock (fp FUN_c043bc68, return 0xC043BCBC; a
+format label there picked the wrong playback profile on the fp, 2026-09-13). The fp L's is FUN_c043bf60
+(same template copy, one vtable+0xC call, return **0xC043BFB4**; template 0xC0CBE218 = 16 zero bytes as on
+the fp), now in the address table (`verify`), so KEYBLD needs no fp L special case.
+
+Untested: ogc_pick only runs with a format, and fp L formats are phase 3.
+
+## Tests (2026-11-04)
+
+- `test_fpl_rescustom.py` (new): builds with FPSUP_CAMERA=fpl and checks no formats, the three picks
+  (site, kind, last, stock bl to the right lookup), no picker / v32 / binpath, every hook site claimed once and
+  chainable, KEYBLD = 0xC043BFB4 (and not the fp's), and, run under FPSUP_CAMERA=fpl, one emulated boot under
+  the real Loader v4 (no REPAIRED / CONFLICT, released for want of formats).
+- test_v3/v4_rescustom, test_rcd_bitdepth, test_lv_text_style: fp-only, skipped (setUpModule) under fpl.
+- Found on the way, not from the port: armasm.py (linked into open-gate/build) imported fwtarget only when
+  the caller had put fp_usb_shell on the path (build_v3_og.py had not); test_rcd_bitdepth lacked NAME / HL
+  after CoreTests got them; test_lv_text_style's two string-installer tests fail on the committed tree too
+  (their mutation seam `#define MAX_STRBASE MAX_STRINGS` is no longer in uishare's ui_apply.c) -- left alone.
+- fp, this machine (Fedora, clang 22.1.8): test_v4_rescustom 78/79, test_rcd_bitdepth 7/7. The one failure,
+  V3UnchangedTests (the v3 build = released 32RESCUS.BIN), gives the same 714c921a… on the committed tree:
+  the compiler, not the port (the release was built on macOS; the core comes out 1,920 B shorter here).

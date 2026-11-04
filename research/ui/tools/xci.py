@@ -101,6 +101,29 @@ def _lz4_block(src):
     return bytes(out)
 
 
+
+def _font(kind):
+    """A font file for rendered tiles.  The builds were made on macOS; on another
+    system the env var (FPSUP_FONT_NARROW_BOLD / FPSUP_FONT_HELVETICA) names the
+    real file, else the URW metric-compatible stand-in is used -- the tiles then
+    differ from a Mac build byte for byte (projects/fpl-port/RESCUSTOM_PORT.md)."""
+    import os, sys
+    mac = {'narrow-bold': '/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf',
+           'helvetica': '/System/Library/Fonts/Helvetica.ttc'}[kind]
+    env = os.environ.get({'narrow-bold': 'FPSUP_FONT_NARROW_BOLD', 'helvetica': 'FPSUP_FONT_HELVETICA'}[kind])
+    if env:
+        return env
+    if os.path.exists(mac):
+        return mac
+    sub = {'narrow-bold': '/usr/share/fonts/urw-base35/NimbusSansNarrow-Bold.otf',
+           'helvetica': '/usr/share/fonts/urw-base35/NimbusSans-Regular.otf'}[kind]
+    if os.path.exists(sub):
+        if not getattr(_font, 'said', set()) >= {kind}:
+            print(f'note: {mac} not found; using {sub} (tiles differ from a macOS build)', file=sys.stderr)
+            _font.said = getattr(_font, 'said', set()) | {kind}
+        return sub
+    return mac
+
 def text_tile(text, w=86, h=49, cap=24, font=None, index=0, ss=8,
               lo=0.30, hi=0.68):
     """照原廠圖塊的樣子排一行字:純白抗鋸齒、垂直置中、左右置中。
@@ -109,7 +132,7 @@ def text_tile(text, w=86, h=49, cap=24, font=None, index=0, ss=8,
     四個字母要塞下就得矮一點,cap 預設 24。
     """
     from PIL import Image, ImageDraw, ImageFont
-    font = font or '/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf'
+    font = font or _font('narrow-bold')
     maxw = w - 12
     for size in range(70, 8, -1):
         f = ImageFont.truetype(font, size * ss, index=index)

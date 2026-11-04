@@ -58,6 +58,12 @@ def built4():
 def asize(block):
     return ((block + LINE - 1) & ~(LINE - 1)) + 2 * LINE       # sloader4.c load_one
 
+def setUpModule():
+    import ogc_layout
+    if ogc_layout.FPL:
+        raise unittest.SkipTest('fp-only (the fp\'s camera model and IMX410 formats); '
+                                'test_fpl_rescustom covers the fp L build')
+
 
 class Cam4(V3R.Cam, T4.Camera):
     """test_v3_rescustom's camera on v4's: the core is the 64-aligned line in its

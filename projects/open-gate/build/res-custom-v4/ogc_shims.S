@@ -98,6 +98,7 @@ recrate_replay:
     LDA     ip, 0xC00C9BD4
     bx      ip
 
+#ifndef OGC_FPL      /* not on the fp L: ogc_layout.HOOKS */
 /* CRCT: original selector first; adjust only an active RCD binning recipe. */
 .global binpath
 binpath:
@@ -115,6 +116,7 @@ binpath_replay:
     push    {r4, r5, r6, r7}
     LDA     ip, 0xC032522C
     bx      ip
+#endif
 
 .macro BIN_WRITER name, nx, target
 .global \name
@@ -153,6 +155,7 @@ vrcgui:
     .asciz  "SetupHelpMenu"
 .balign 4
 
+#ifndef OGC_FPL      /* not on the fp L: ogc_layout.HOOKS */
 /* ---- C043CCF8 picker: r0 obj, r1 table, r2 key -> entry or stock ------------ */
 .global picker
 picker:
@@ -170,6 +173,32 @@ picker_replay:
     push    {r4, r5, r6, r7, r10, r11, lr}
     LDA     ip, 0xC043CCFC
     bx      ip
+#else
+/* ---- fp L: the recording key builder FUN_c043ba20's three lookup calls -------
+ * (bl sites C043BAB0 8-bit / C043BAE4 10-bit / C043BB10 12-bit, each `bl` to a
+ * {base, count} walk of the crop step's descriptor): r0 = the descriptor slot,
+ * r1 = the key, r6 = the request ([r6+0x48] = crop factor x 100).  Ours ->
+ * our entry (the firmware's 16-byte layout); else the lookup itself. */
+.macro PICKSHIM name, tab, nx
+.global \name
+\name:
+    push    {r0, r1, r2, r3, r4, lr}
+    mov     r2, r1
+    mov     r1, #\tab
+    ldr     r3, [r6, #0x48]
+    CALLC   FN_PICK
+    cmp     r0, #0
+    beq     1f
+    add     sp, sp, #4
+    pop     {r1, r2, r3, r4, lr}
+    bx      lr
+1:  pop     {r0, r1, r2, r3, r4, lr}
+    PASS    \nx
+.endm
+    PICKSHIM pick8, 1, NX_PICK8
+    PICKSHIM pick10, 2, NX_PICK10
+    PICKSHIM pick12, 3, NX_PICK12
+#endif
 
 /* ---- C005C020 resolution setter: r1 = value -----------------------------------
  * Through: ours before (phase 0), the firmware's setter, ours after (phase 1:
@@ -489,6 +518,7 @@ zg:
     TO_DONOR r0
     pop     {r4, pc}
 
+#ifndef OGC_FPL      /* not on the fp L: ogc_layout.HOOKS */
 /* C03249A0 XC_ImageSensorIMX410::v32(imager, i): our row for our ids */
 .global v32
 v32:
@@ -505,6 +535,7 @@ v32_replay:
     push    {r4, r5, r6, r7, r8, sl, fp, lr}
     LDA     ip, 0xC03249A4
     bx      ip
+#endif
 
 /* ---- FUN_c057a6a0 / FUN_c05824d0: the menu committed a resolution row (r0 = var) */
 .macro COMMIT name, nx, back, fn=FN_CMT
@@ -689,7 +720,11 @@ bitnorm_replay:
  * first, then the gate on its result; the movt at C043B6A8 completes either */
 .global mag
 mag:
+#ifdef OGC_FPL
+    movw    r1, #:lower16:0xC0BE46F0     /* "MAG4", mapped (fp L 0xC0CBE16C) */
+#else
     movw    r1, #0x46f0
+#endif
     push    {r0, r1, r2, r3, r4, lr}
     ldr     r2, [sp, #4]
     mov     r1, #4
@@ -771,7 +806,11 @@ angtv:
     PASS    NX_ANGTV
 .global angtv_replay
 angtv_replay:
+#ifdef OGC_FPL
+    movw    r2, #:lower16:0xC0D02400     /* the table it loads, mapped (fp L 0xC0D12930) */
+#else
     movw    r2, #0x2400
+#endif
     LDA     ip, 0xC052DD00
     bx      ip
 

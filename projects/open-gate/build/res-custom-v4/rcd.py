@@ -23,6 +23,11 @@ ROOT = HERE.parents[3]
 UISHARE = ROOT / 'fpSup' / 'uishare'
 sys.path.insert(0, str(HERE))
 import ogc_layout as L                                    # noqa: E402
+try:            # the camera FPSUP_CAMERA names: fp addresses mapped (fp_usb_shell/fwtarget.py)
+    from fwtarget import fw as _fw
+except ImportError:                                       # pragma: no cover
+    def _fw(a):
+        return a
 
 H = L.RCD
 
@@ -353,7 +358,7 @@ def decode(data, image=None, stock_ids=None):
 def _base_row(image, pid):
     if pid in L.VPID_POOL or pid > 0x200:
         raise RcdError('PROFILE')
-    base = struct.unpack_from('<I', image, L.MAPPING + 4 * pid - 0xC0000000)[0]
+    base = struct.unpack_from('<I', image, _fw(L.MAPPING) + 4 * pid - 0xC0000000)[0]
     if base == 0xFFFFFFFF:
         raise RcdError('PROFILE')
     return base
@@ -520,10 +525,10 @@ def qs_max_record(n_max=8):
 
 # ---- the virtual frame rates' menu (rows 9..12; vr_ui.py builds the pages) ---------------------
 # (resource, stock length, name): the six frame-rate list variants EXCL_FrameRate picks
-VR_CSV = ((0xC0F8E848, 257, 'B2_5_5'), (0xC0F8E94C, 257, 'B2_5_5_excl'),
-          (0xC0F8EA50, 257, 'B2_5_5_excl2'), (0xC0F8EB54, 257, 'B2_5_5_excl3'),
-          (0xC0F8EC58, 257, 'B2_5_5_excl4'), (0xC0F8ED5C, 257, 'B2_5_5_excl5'))
-BIT_CSV = ((0xC0F8E6A8, 113, 'B2_5_2'), (0xC0F8E71C, 113, 'B2_5_2_excl'))
+VR_CSV = ((_fw(0xC0F8E848), 257, 'B2_5_5'), (_fw(0xC0F8E94C), 257, 'B2_5_5_excl'),
+          (_fw(0xC0F8EA50), 257, 'B2_5_5_excl2'), (_fw(0xC0F8EB54), 257, 'B2_5_5_excl3'),
+          (_fw(0xC0F8EC58), 257, 'B2_5_5_excl4'), (_fw(0xC0F8ED5C), 257, 'B2_5_5_excl5'))
+BIT_CSV = ((_fw(0xC0F8E6A8), 113, 'B2_5_2'), (_fw(0xC0F8E71C), 113, 'B2_5_2_excl'))
 
 
 def bit_template():
