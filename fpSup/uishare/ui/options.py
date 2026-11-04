@@ -35,13 +35,19 @@ from . import fpui
 HERE = pathlib.Path(__file__).resolve().parent
 FPSUP = HERE.parents[1]
 ROOT = FPSUP.parent
-IMAGE = ROOT / 'out' / 'MAIN_c0000000.bin'
-NBU_BASE = 0xC18C0460
-SETS = ROOT / 'research' / 'ui' / 'nbu_sets.json'
+# The camera FPSUP_CAMERA names (fp_usb_shell/fwtarget.py): the addresses below are the
+# fp's, mapped for another camera (the fp L's UI data is the fp's, moved as one block)
+sys.path.insert(0, str(FPSUP / 'fp_usb_shell'))
+import fwtarget                                          # noqa: E402
+_fw = fwtarget.fw
+CAMERA = fwtarget.target()
+IMAGE = ROOT / ('out' if CAMERA == 'fp' else 'out_' + CAMERA) / 'MAIN_c0000000.bin'
+NBU_BASE = _fw(0xC18C0460)
+SETS = ROOT / 'research' / 'ui' / ('nbu_sets.json' if CAMERA == 'fp' else f'nbu_sets_{CAMERA}.json')
 
 # The redirect site and its handler (fv_handler.S); raw-view's H1, generalised.
-FV_SITE, FV_STOCK, FV_CAPACITY = 0xC05E5BEC, 0x60681840, 32
-CAVE_BUMP, CAVE_ARENA_END, THUMB_VENEER = 0xC072E060, 0xC072EFB4, 0xF000F8DF
+FV_SITE, FV_STOCK, FV_CAPACITY = _fw(0xC05E5BEC), 0x60681840, 32
+CAVE_BUMP, CAVE_ARENA_END, THUMB_VENEER = _fw(0xC072E060), _fw(0xC072EFB4), 0xF000F8DF
 
 
 _IMAGE = None
@@ -119,16 +125,16 @@ def csv_file(blk, addr, size, adds, cells=(), growth=128):
 
 # ---- COLOR: raw-view's RAW row ----------------------------------------------
 COLOR_CSV = [   # (name, address, size, new row template, cell edits)
-    ('ListColorButtonMenu', 0xC0D566EC, 453, '{N},set_flash_1,0,{Q},0,{P}',
+    ('ListColorButtonMenu', _fw(0xC0D566EC), 453, '{N},set_flash_1,0,{Q},0,{P}',
      [(fpui.ROW_FIRST, 3, '{P}'), (fpui.ROW_LAST_BEFORE, 4, '{P}')]),
-    ('ListColorButtonMenu_EXCL', 0xC0D568B4, 483, '{N},set_common_1,1,15,15,15', []),
-    ('ListColorButtonMenu_EXCL2', 0xC0D56A98, 452, '{N},set_common_1,1,14,0,15', []),
+    ('ListColorButtonMenu_EXCL', _fw(0xC0D568B4), 483, '{N},set_common_1,1,15,15,15', []),
+    ('ListColorButtonMenu_EXCL2', _fw(0xC0D56A98), 452, '{N},set_common_1,1,14,0,15', []),
 ]
-COLOR_ROW_MAX = [0xC1D63010, 0xC1D631AC, 0xC1D5F200, 0xC1D62A7C, 0xC1D63F8C, 0xC1D65B24]
-COLOR_TEXT_END = 0xC1D66CBC               # BE word: text group end, +33 per row
-RAW_ICON = ('set_flash_1.xci', 0xC14EBAAC, 533)
-RAWVIEW_EFFECT_END = 0xC1D640A8           # raw-view's: the Effect box covers its row
-RAWVIEW_ADVANCED = 0xC1D6ED48             # raw-view's: AdvancedSettings Normal <= 16
+COLOR_ROW_MAX = [_fw(0xC1D63010), _fw(0xC1D631AC), _fw(0xC1D5F200), _fw(0xC1D62A7C), _fw(0xC1D63F8C), _fw(0xC1D65B24)]
+COLOR_TEXT_END = _fw(0xC1D66CBC)               # BE word: text group end, +33 per row
+RAW_ICON = ('set_flash_1.xci', _fw(0xC14EBAAC), 533)
+RAWVIEW_EFFECT_END = _fw(0xC1D640A8)           # raw-view's: the Effect box covers its row
+RAWVIEW_ADVANCED = _fw(0xC1D6ED48)             # raw-view's: AdvancedSettings Normal <= 16
 
 
 def color_raw(icon_bytes, expect_index=16):
@@ -156,9 +162,9 @@ def color_raw(icon_bytes, expect_index=16):
 
 
 # ---- movie resolution: OpenGate's third state ----------------------------------
-RES_CSV = ('B2_5_4', 0xC0F8E7EC, 89)
-RES_LIST_MAX = 0xC1A709BC                 # BE float 1.0: List obj 4259, rows - 1
-RES_SUMMARY = {2: 0xC1A7246B + 32}        # IconText03 drawText text, per state
+RES_CSV = ('B2_5_4', _fw(0xC0F8E7EC), 89)
+RES_LIST_MAX = _fw(0xC1A709BC)                 # BE float 1.0: List obj 4259, rows - 1
+RES_SUMMARY = {2: _fw(0xC1A7246B) + 32}        # IconText03 drawText text, per state
 
 
 def resolution(label, summary, expect_state=2):
@@ -199,7 +205,7 @@ def run(blocks, img=None, pool_stock=None):
     """Apply blocks (encoded) in order with the reference applier against the
     stock image. Returns (pages, files, pool, results)."""
     img = img or image()
-    pool_stock = pool_stock or at(img, 0xC18C0474, 176152)
+    pool_stock = pool_stock or at(img, _fw(0xC18C0474), 176152)
     sets = json.loads(SETS.read_text())['sets']
     pages = {}
     for s in sets:
@@ -218,9 +224,9 @@ def run(blocks, img=None, pool_stock=None):
 # objects with a text word at +32; k = 5..7 have none, so the text word is set,
 # the object's flag byte (+31) turned on and five zero bytes inserted at +36
 # (Jose Hurtado's Formats v0.6.1, camera). Each only by the sup with that row.
-RES_SUMMARY_K = {2: (0xC1A7246B, False), 3: (0xC1A725AC, False), 4: (0xC1A726ED, False),
-                 5: (0xC1A7282E, True), 6: (0xC1A7296A, True), 7: (0xC1A72AA6, True)}
-RES_POPUP_Y = 0xC1A70827 + 36             # BE float: the popup's offset, 0 stock
+RES_SUMMARY_K = {2: (_fw(0xC1A7246B), False), 3: (_fw(0xC1A725AC), False), 4: (_fw(0xC1A726ED), False),
+                 5: (_fw(0xC1A7282E), True), 6: (_fw(0xC1A7296A), True), 7: (_fw(0xC1A72AA6), True)}
+RES_POPUP_Y = _fw(0xC1A70827) + 36             # BE float: the popup's offset, 0 stock
 # f(N) of the popup offset: N = 3 (OpenGate) 0 and N = 8 (Jose) -164 on the
 # camera; 4..7 are a straight line between them, NOT VERIFIED. The sup with
 # row k adds f(k+1) - f(k), so the sum over rows 2..N-1 is f(N), any order.
@@ -229,7 +235,7 @@ RES_POPUP_VERIFIED = {3, 8}
 # Six page names (B2_5_5, B2_5_5_excl..5) the summary picks by mode: Jose
 # points all six at B2_5_5 once there are more rows than the _excl variants
 # list. Done by the sup with row 3 (it exists iff N >= 4); N = 4..7 NOT VERIFIED.
-RES_EXCL = (0xC1A74F57, [54, 64, 74, 84, 94, 104], 0x9B94)
+RES_EXCL = (_fw(0xC1A74F57), [54, 64, 74, 84, 94, 104], 0x9B94)
 RES_K_MAX = 7
 
 

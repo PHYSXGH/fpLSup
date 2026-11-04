@@ -183,13 +183,17 @@ PROFILE_CLASSES = (((1, 33), (51, 83), (101, 989), (1771, 1838), (1841, 1978), (
 if FPL:
     VPID_POOL = list(range(34, 51)) + list(range(84, 91)) + list(range(97, 101))
     MAX_VARS = len(VPID_POOL)
+# the highest profile id a data file may name (the mapping table's extent): the fp's table
+# (0xC0BD05D4) has 500 entries, bounded at 0x200 as always; the fp L's (0xC0BF6820) 4,000
+PID_MAX = 0xF9F if FPL else 0x200
 # ---- a virtual mode -----------------------------------------------------------
 # Seven per-mode tables (design §3.2.1): kind, descriptor field (base, count), stride.
 TABLES = [('TIM', 0x00, 0x04, 0x20), ('META', 0x08, 0x0C, 100), ('R28', 0x24, 0x28, 0x28),
           ('R38', 0x40, 0x44, 0x38), ('R14', 0x48, 0x4C, 0x14), ('R68', 0xF4, 0xF8, 0x68),
           ('REG', 0x00, 0x04, 0x460 if FPL else 0x288)]   # REG: the register descriptor (0xC0B5FDA4);
-# fp L: REG records are 0x460 bytes (IMX455, projects/fpl-port/RESCUSTOM_PORT.md).  R28/R38/R14/R68
-# keep the IMX410's strides, unverified on the fp L: they only matter when a virtual mode is cloned.
+# fp L: REG records are 0x460 bytes (IMX455, projects/fpl-port/RESCUSTOM_PORT.md).  The other seven
+# (and R10, ZOOM) are the fp's: the fp L's lookups (lk_*, ac38) read the same descriptor fields with the
+# same strides, instruction for instruction (static, 2026-11-04).
 VM = dict(ID=0x00, DONOR=0x04, FILLED=0x08, REGFILLED=0x0C, ZFILLED=0x10,
           TW0=0x14, TW1=0x18, NOM=0x1C,      # the last picker hit's timing / nominal fps
           PTR=0x20,                          # 7 row pointers (absolute, set when filled)
@@ -367,6 +371,10 @@ RATES = ((0, '23_98', 1, 3003000, 0, 24.0, 24, 2398), (1, '24', 12, 3000000, 0, 
          (4, '48', 13, 1500000, 0, 48.0, 48, 4800), (5, '50', 4, 1440000, 1, 50.0, 50, 5000),
          (6, '60', 5, 1201200, 0, 60.0, 60, 5994), (7, '100', 6, 720000, 1, 50.0, 100, 10000),
          (8, '120', 7, 600600, 0, 60.0, 120, 11988))
+if FPL:   # the fp L's rate tokens (0xC0CBE2D0..; ogc.c key_make): the true rate and "FPS"
+    _FPL_SUFFIX = ('23_98FPS', '24FPS', '25FPS', '29_97FPS', '48FPS', '50FPS', '59_94FPS', '100FPS',
+                   '119_88FPS')
+    RATES = tuple((r[0], _FPL_SUFFIX[r[0]]) + r[2:] for r in RATES)
 #        cycles, +0x30 (engine cadence), nominal, the stock row it rides on, generated
 VR_TIME = ((300300, 240000 / 1001, 240, 8, 1), (257400, 280000 / 1001, 280, 8, 1),
            (4004000, 18000 / 1001, 18, 0, 1),
@@ -429,7 +437,7 @@ def header():
          'R10_FIELD': R10[0], 'R10_COUNT': R10[1], 'R10_STRIDE': R10[2], 'T_R10': len(TABLES),
          'T_ZOOM': T_ZOOM_KIND, 'OGC_MAX_VMS': MAX_VMS, 'OGC_MAX_AVAIL': MAX_AVAIL,
          **({'OGC_CAP_BACK': CAP_BACK} if HOOKCNT else {}),
-         'OGC_S_BYTES': S_BYTES, 'OVR_BYTES': OVR_BYTES, 'OGC_VPID0': VPID0,
+         'OGC_S_BYTES': S_BYTES, 'OVR_BYTES': OVR_BYTES, 'OGC_VPID0': VPID0, 'OGC_PID_MAX': PID_MAX,
          'OGC_QS_SLOTS': QS_SLOTS, 'OGC_QS_CAP': QS_CAP, 'OGC_MAX_VARS': MAX_VARS,
          'RFLAG_CLAMP': RFLAG_CLAMP, 'VR_K': VR_K, 'VR_ROWS': VR_ROWS, 'VR_ROW0': VR_ROW0, 'VR_CSVS': VR_CSVS,
          **{f'VR_RANK{i}': r for i, (r, _, _) in enumerate(VRATES)},

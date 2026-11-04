@@ -8,12 +8,19 @@
 words exactly as the firmware's call would: the site's B.W, the cave veneer,
 each layer's next pointer, and the firmware's rule at the bottom.
 """
+import pathlib
 import struct
+import sys
+
+# the camera FPSUP_CAMERA names: the sites are the fp's, mapped (fwtarget; same stock words on the fp L)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'fp_usb_shell'))
+import fwtarget                                          # noqa: E402
+_fw = fwtarget.fw
 
 SITES = {                       # site, stock word, the header field holding that entry's offset
-    'resolve': (0xC05E5B58, 0x3FFFF1B1, 60),
-    'owns': (0xC05E61C8, 0x428A6942, 64),
-    'remain': (0xC05E61E0, 0x69406902, 68),
+    'resolve': (_fw(0xC05E5B58), 0x3FFFF1B1, 60),
+    'owns': (_fw(0xC05E61C8), 0x428A6942, 64),
+    'remain': (_fw(0xC05E61E0), 0x69406902, 68),
 }
 # header v5 (ui_strings.S): +0 name (8 bytes), +8 version, +12 base, +16 count,
 # +20 lo, +24 hi, +28/+32/+36 next, +40 table, +44 QS id, +48 QS enum,

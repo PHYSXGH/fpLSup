@@ -198,3 +198,77 @@ Untested: ogc_pick only runs with a format, and fp L formats are phase 3.
 - fp, this machine (Fedora, clang 22.1.8): test_v4_rescustom 78/79, test_rcd_bitdepth 7/7. The one failure,
   V3UnchangedTests (the v3 build = released 32RESCUS.BIN), gives the same 714c921a… on the committed tree:
   the compiler, not the port (the release was built on macOS; the core comes out 1,920 B shorter here).
+
+## Phase 3 groundwork (static, 2026-11-04)
+
+**Per-mode tables: confirmed.** The fp L's lookups (lk_tim / meta / r28 / r38 / r14 / r68 / r10 and the
+magnifier copier ac38) are the fp's instruction for instruction (only branch offsets differ): same
+descriptor fields, same strides (0x20, 0x64, 0x28, 0x38, 0x14, 0x68, 8; magnifier +0x128, 0x5C). REG is
+0x460. The "unverified strides" caveat in ogc_layout is gone.
+
+**Sensor clock.** The IMX455 timing words use the same 72 MHz as the IMX410 (UHD 23.98: 3,003,000 cycles
+a frame), so ogc_layout.solve's arithmetic carries over; MIN_TAIL and the hmax limits are the IMX410's and
+still need checking against `imx455_modes.csv`.
+
+**Open-gate donors already in the firmware.** Full-sensor 2x2-binned modes: id 3 (4784x3190 read, 30 fps,
+hmax 580), id 98 (4784x3190, out 4768x3168, 38 fps), id 143 (10 fps); full-sensor unbinned id 0 / 97 / 142
+(9568x6380, out 9520x6328, 9-17 fps). A 3:2 open-gate format can start from these rather than new
+register programming.
+
+**The mapping table** (0xC0BF6820) has 4,000 entries (fp: 500 at 0xC0BD05D4, bounded at 0x200 by the
+core). `ogc_layout.PID_MAX` = 0xF9F on the fp L (0x200 on the fp, so the fp build is unchanged); ogc.c and
+rcd.py use it.
+
+**Profile ids of the recording entries** are static data (0xC0CBE840..): per crop step, UHD23_98FPS is
+type 3 p161.. (+0x30), type 3 p3081.. (+0x40), type 5 p2061.. (+0x48, 8-bit CinemaDNG), p2391.. (+0x50,
+10-bit), p2721.. (+0x58, 12-bit); 19 crop-step copies (p161..179, sensor mode 161 then 187 from the 6th).
+
+**The classifier** 0xC0439F70 returns flags, not a class: 1 = 1..33, 2 = 51..83, 4 = 101..989, 8 =
+2001..2989 (CinemaDNG), 0x10 = 1771..1838, 0x20 = 1841..1978, 0x100 = [obj+0xE0] == 11. The fp's
+classifier gives its CinemaDNG donor p83 no flag, and the fp formats record through flag-0 profiles on
+purpose (OG3K_PLAYBACK_PROFILE_CLASSES.md: p83 fixed the S-size stills freeze). The fp L pool keeps that
+choice (34..50, 84..90, 97..100, no flag); whether CinemaDNG records through a flag-0 profile on the fp L,
+or our profiles must carry flag 8 (empty slots inside 2001..2989), is a camera question.
+
+**Still needed for a first fp L format:** the canvas profile's fields on the fp L (the fp formats write
+fp offsets: +0x0C/+0x10 sizes, +0x30 engine fps, +0xB0, ...), the register overrides for a new readout
+window (0x460-byte records), the menu pack (NBR images), and the user's choice of formats.
+
+**The canvas: same fields.** The canvas builder (fp FUN_c0439d18, fp L FUN_c043a090) fills the canvas
+column-wise (canvas + off = column[row]); `tools/canvas_compare.py` reads both builders and compares a
+profile pair. fp p132 (UHD23_98, 8-bit CinemaDNG) against fp L p2061 (UHD23_98FPS, 8-bit, crop 1.00): 67
+fields on the fp, 65 on the fp L (no +0xF0, no +0x108), and the identifying ones agree at the same offsets
+-- +0x00/+0x04 raster 3856x2170, +0x24/+0x2C output 3840x2160, +0x30 engine fps 24.0, +0xFC..+0x104 1.0f
+-- while +0xF4/+0xF8 hold each sensor's read area (fp 6064x3412, fp L 9568x5382) and the preview sizes
+(+0x0C/+0x10/+0x20/+0x28, +0x60/+0x64, +0xD0..+0xE0) differ. So the fp formats' canvas pairs keep their
+meaning on the fp L, except any at +0xF0 / +0x108. The fp's stock CinemaDNG profiles (p131.., keys
+"UHD30") carry classifier flag 8 like the fp L's p2001..; only the fp formats' donor p83 has none.
+
+## OG48K: the first fp L format (2026-11-04, static + emulated)
+
+`res-custom-v4/fpl_formats.py`. The fp's OG3K recipe carried over: donor sensor mode 98 (full sensor, 2x2
+binned, 4784x3190 read, 38.4 fps ceiling), base profile p1003 (the stock 4768x3168 still, no classifier flag,
+like the fp's p83), recording raster 4784x3184, active 4768x3168 (3:2), the video values +0x90 = 1 /
++0xC0 = 0, and the sensor read area / scale set to the binned readout (+0xF4/+0xF8 4784x3190, +0xFC..+0x104
+2.0f -- p1003 itself reads the whole sensor unbinned). Video clamp on: on the fp L too only video modes have
+the receiver row's +0x04 bit 3 (table 0xC0B94BBC, added `checked`). No preview group (prev_h 0). Rates
+23.98 / 24 / 25 / 29.97 (+ the core's virtual 17.98); 29.97 solves to the firmware's own mode 3 timing
+(hmax 580, tail 620, vmax 4142). 8/10/12-bit. Resolution value 10 (uishare ui/enums.py 'OG48K').
+
+What had to change for it:
+- keys: the fp L's rate tokens are the true rate + "FPS" ("23_98FPS" .. "119_88FPS", strings 0xC0CBE2D0..);
+  ogc.c key_make and ogc_layout.RATES carry them under OGC_FPL / FPL.
+- uishare's ui package (options.py, qs.py, chain.py) was fp-only: image, resource-set index, NBU base,
+  the file-redirect site / cave words and every UI-data address now go through fwtarget (identity on the
+  fp). Before, the fp L core's menu block named the fp's redirect site and the applier refused it
+  (UIA_HOOK, found with a diagnostic build). build_v3_rescustom no longer maps the template's sites again.
+- rcd.py / vr_ui.py imported fwtarget with a silent identity fallback; now a plain import.
+
+Emulated (test_fpl_rescustom, 8/8): with OG48K.RCD the core accepts the file (OCD01010100), every claim,
+the donor's timing claim, the veneers and the bit-depth menu go in, and it reaches the menu rows (OCO0: the
+bare harness has no GUI) -- the same point the fp core reaches with OG3K there. Beyond that only the camera.
+fp: core and all five .RCDs unchanged; uishare test_options / test_qs / test_qs_option / test_qs_layer /
+test_ui_strings / test_layer_compat / test_qs_c pass.
+
+Card: `cards/20261104-rescustom-og48k-r1` = card r4 (rebuilt, byte-identical) + `fpSup\RES-Custom_v0.1.5.BIN`
+(`33537573…`) + `fpSup\RESCUS\OG48K.RCD` (`2015d873…`).

@@ -1578,6 +1578,27 @@ static u32 key_make(u32 out, u32 lab, u32 j, u32 crop)
     u32 n = 0;
     for (u32 i = 0; i < 16; i++) B8(out + i) = 0;
     while (n < 8 && B8(lab + n)) { B8(out + n) = B8(lab + n); n++; }
+#ifdef OGC_FPL
+    /* the fp L's rate tokens (the key builder's second emitter, strings at 0xC0CBE2D0..):
+     * the true rate and "FPS" -- "23_98FPS" .. "119_88FPS"; up to three packed words */
+#define C4(a, b, c, d) ((u32)(a) | (u32)(b) << 8 | (u32)(c) << 16 | (u32)(d) << 24)
+    u32 s0, s1 = 0, s2 = 0;
+    switch (j) {
+    case 0: s0 = C4('2', '3', '_', '9'); s1 = C4('8', 'F', 'P', 'S'); break;
+    case 1: s0 = C4('2', '4', 'F', 'P'); s1 = 'S'; break;
+    case 2: s0 = C4('2', '5', 'F', 'P'); s1 = 'S'; break;
+    case 3: s0 = C4('2', '9', '_', '9'); s1 = C4('7', 'F', 'P', 'S'); break;
+    case 4: s0 = C4('4', '8', 'F', 'P'); s1 = 'S'; break;
+    case 5: s0 = C4('5', '0', 'F', 'P'); s1 = 'S'; break;
+    case 6: s0 = C4('5', '9', '_', '9'); s1 = C4('4', 'F', 'P', 'S'); break;
+    case 7: s0 = C4('1', '0', '0', 'F'); s1 = C4('P', 'S', 0, 0); break;
+    default: s0 = C4('1', '1', '9', '_'); s1 = C4('8', '8', 'F', 'P'); s2 = 'S'; break;
+    }
+#undef C4
+    for (; s0; s0 >>= 8) B8(out + n++) = (u8)s0;
+    for (; s1; s1 >>= 8) B8(out + n++) = (u8)s1;
+    for (; s2; s2 >>= 8) B8(out + n++) = (u8)s2;
+#else
     u32 sfx;                            /* up to five characters, little-endian packed */
     switch (j) {
     case 0: sfx = '2' | '3' << 8 | '_' << 16 | (u32)'9' << 24; break;
@@ -1592,6 +1613,7 @@ static u32 key_make(u32 out, u32 lab, u32 j, u32 crop)
     }
     for (; sfx; sfx >>= 8) B8(out + n++) = (u8)sfx;
     if (j == 0) B8(out + n++) = '8';
+#endif
     if (crop) { B8(out + n) = 'C'; B8(out + n + 1) = 'R'; B8(out + n + 2) = 'O'; B8(out + n + 3) = 'P'; n += 4; }
     return n < 16;
 }
@@ -1679,7 +1701,7 @@ static int in_pool(u8 *S, u32 pid)
 
 static int profile_ok(u8 *S, u32 pid)
 {
-    return !in_pool(S, pid) && pid <= 0x200u && W(OGC_MAPPING + 4 * pid) != 0xFFFFFFFFu;
+    return !in_pool(S, pid) && pid <= OGC_PID_MAX && W(OGC_MAPPING + 4 * pid) != 0xFFFFFFFFu;
 }
 
 static int pairs_ok(u32 at, u32 n)
@@ -1792,7 +1814,7 @@ static u32 rcd_check(u8 *S, u32 f, u32 n)
             if (!pairs_ok(at + 8 + 4 * np, nq)) return WHY_STANDBY;
             for (u32 k = 0; k < np; k++) {
                 u32 q = W(at + 8 + 4 * k);
-                if (q > 0x200u || in_pool(S, q)) return WHY_STANDBY;
+                if (q > OGC_PID_MAX || in_pool(S, q)) return WHY_STANDBY;
             }
             at += 8 + 4 * np + 8 * nq;
         }

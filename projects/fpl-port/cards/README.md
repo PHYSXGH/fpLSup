@@ -432,3 +432,17 @@ Card `20261103-fast3-gyro-debug-noptp-dist5`: dist4 with the focal cap back on (
 camera's convention; `../FOCAL_CAP.md`). At 1.00× the focal is 0.5% longer than dist4's (UHD: 9568 → 9520;
 FHD: 9552 → 9520); crops unchanged. fpSup.BIN `9e9fb33e…`, AutoRun.txt unchanged (`1bfd1c39…`). fp builds
 byte-identical. Copied to the card 2026-11-03.
+
+## 20261104-rescustom-og48k-r1 (res-custom phase 3, not on the camera yet)
+
+Card r4 (rebuilt from the tree, every file byte-identical to r4's) plus RES-Custom (`RES-Custom_v0.1.5.BIN`
+`33537573…`) and its first fp L format, `RESCUS\OG48K.RCD` (`2015d873…`): open gate 4768x3168 from sensor
+mode 98. Copy the whole folder's contents to the card root. Notes: `../RESCUSTOM_PORT.md` (OG48K).
+
+To check, in order: (1) boots as r4 did; LOAD.LOG has `RES-Custom_v0.1.5.BIN` LOADED and `OCD01010100`,
+`OCO00000001`; (2) Settings > resolution lists `OG48K 4768x3168`; the fpSup page lists RES-Custom;
+(3) select it at 23.98, CinemaDNG 8-bit: live view, then a few seconds' take; (4) the take opens at
+4768x3168; (5) back to UHD, power off and on: it comes back stock. If anything freezes: card out, battery
+out. The camera saves its own settings at power-off; the core's save hook (the `save` site) puts the stock
+resolution there instead of OG48K's, as on the fp -- not yet seen on the fp L, so step (5) checks it.
+Fast Start 3 is on from r3.

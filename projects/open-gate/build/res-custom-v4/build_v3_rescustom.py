@@ -72,7 +72,7 @@ if L.FPL:
     # the five are IMX410 formats: their donor modes are fp sensor modes the fp L
     # (IMX455) does not have, so rcd.decode refuses them (ENTRY).  fp L formats are
     # port phase 3 (projects/fpl-port/RESCUSTOM_PORT.md); until then the core ships alone
-    FORMATS = ()
+    FORMATS = ('og48k',)               # fpl_formats.py (phase 3)
 JOSE = ('s16', 'og35k', 'og4k')       # jose_formats.py (milestone 5)
 GEOMETRY = {'OG3K': 'OG3K 3008x2000', 'OG2K': 'OG2K 2000x1334'}   # the menu sups' row texts
 
@@ -97,6 +97,11 @@ def stock(a, n):
 
 # ---- the rows -----------------------------------------------------------------
 def row_data(target, tmp):
+    if L.FPL:
+        import fpl_formats
+        d = fpl_formats.row_data(target, tmp, img())
+        d['base_row'] = word(_fw(L.MAPPING) + 4 * d['profile'], img())
+        return d
     if target == 'm12-240':
         import m12_240
         return m12_240.row_data(tmp, img())
@@ -303,10 +308,11 @@ def build_core(tmp, n_formats=len(FORMATS), virtual=False, v4=False):
         raise BuildError('S.NEXT holds 64')
 
     claims = [(h[0], stock(h[0], 4), CHAIN) for h in hooks]
+    v4_strings = {_fw(x) for x in V4_STRING_SITES}
     for a, sw in tinfo['sites']:                # the menu: the file-redirect and string sites
-        if v4 and a in V4_STRING_SITES:
+        if v4 and a in v4_strings:
             continue
-        fa = _fw(a)                             # the template names the fp's site
+        fa = a                                  # uishare names the target camera's site (fwtarget)
         if stock(fa, 4) != struct.pack('<I', sw):
             raise BuildError(f'uishare site 0x{a:08X} (0x{fa:08X}): stock is not the reference image')
         claims.append((fa, struct.pack('<I', sw), SHARED_UI))
@@ -463,7 +469,7 @@ def build_core(tmp, n_formats=len(FORMATS), virtual=False, v4=False):
                        for s, to, k, nx, rp, _ in hooks],
              'hook_names': {f'0x{site:08X}': n for n, site, _ in L.HOOKS},
              'claims': [{'address': f'0x{a:08X}', 'bytes': len(s), 'kind': k} for a, s, k in claims],
-             'ui_sites': [f'0x{a:08X}' for a, _ in tinfo['sites'] if not (v4 and a in V4_STRING_SITES)],
+             'ui_sites': [f'0x{a:08X}' for a, _ in tinfo['sites'] if not (v4 and a in v4_strings)],
              'shims': {k: v for k, v in syms.items()},
              'fns': {n: L.S['FN'] + 4 * i for i, n in enumerate(L.FNS)},
              'S': L.S, 'ROW': L.ROW, 'ENT': L.ENT, 'VM': L.VM, 'VM_BUF': L.VM_BUF}

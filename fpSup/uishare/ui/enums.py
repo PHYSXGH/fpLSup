@@ -19,6 +19,7 @@ RESOLUTION = {
     'OG2K': 7,
     'OG4K': 8,
     'OG3.5K': 9,
+    'OG48K': 10,        # fp L open gate (4768x3168, IMX455 mode 98), res-custom fpl_formats.py
 }
 STOCK = {'FHD', 'UHD'}
 UIS_RES_ENUM_BASE = 0x4D4E4500          # claim_res id = base + value ("\0ENM" + value)

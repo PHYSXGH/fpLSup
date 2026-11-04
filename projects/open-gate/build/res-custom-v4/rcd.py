@@ -23,11 +23,9 @@ ROOT = HERE.parents[3]
 UISHARE = ROOT / 'fpSup' / 'uishare'
 sys.path.insert(0, str(HERE))
 import ogc_layout as L                                    # noqa: E402
-try:            # the camera FPSUP_CAMERA names: fp addresses mapped (fp_usb_shell/fwtarget.py)
-    from fwtarget import fw as _fw
-except ImportError:                                       # pragma: no cover
-    def _fw(a):
-        return a
+# the camera FPSUP_CAMERA names: fp addresses mapped (fp_usb_shell/fwtarget.py); no silent fallback
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[4] / 'fpSup' / 'fp_usb_shell'))
+from fwtarget import fw as _fw                          # noqa: E402
 
 H = L.RCD
 
@@ -310,7 +308,7 @@ def decode(data, image=None, stock_ids=None):
                 raise RcdError('STANDBY')
             pids = [w(at + 8 + 4 * i) for i in range(npid)]
             pairs = _pairs_ok(data, at + 8 + 4 * npid, npair)
-            if pairs is None or any(p > 0x200 or p in L.VPID_POOL for p in pids):
+            if pairs is None or any(p > L.PID_MAX or p in L.VPID_POOL for p in pids):
                 raise RcdError('STANDBY')
             out['standby'].append((pids, pairs, cond))
             at += 8 + 4 * npid + 8 * npair
@@ -356,7 +354,7 @@ def decode(data, image=None, stock_ids=None):
 
 
 def _base_row(image, pid):
-    if pid in L.VPID_POOL or pid > 0x200:
+    if pid in L.VPID_POOL or pid > L.PID_MAX:
         raise RcdError('PROFILE')
     base = struct.unpack_from('<I', image, _fw(L.MAPPING) + 4 * pid - 0xC0000000)[0]
     if base == 0xFFFFFFFF:

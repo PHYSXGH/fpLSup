@@ -472,3 +472,4 @@
 0xc043bc68	0xc043bf60	verify	playback key builder (fp FUN_c043bc68, mode 5): same template copy + one vtable+0xC call; fp L 0xC043BF60 by structure (res-custom KEYBLD)
 0xc043bcbc	0xc043bfb4	verify	the playback key builder's return from the resolution-name emitter (res-custom ogc.c KEYBLD: the name hook leaves lookup keys stock)
 0xc0be477c	0xc0cbe218	verify	the playback key template (16 bytes) the key builder copies
+0xc0b5c638	0xc0b94bbc	checked	the receiver / clamp table (R38, 0x38 rows, the timing table's order): all 85 fp L mode ids match in order; video modes +0x04 bit 3 set, stills modes 98/3/143 clear (as on the fp)

@@ -33,11 +33,9 @@ sys.path.insert(0, str(BUILD))
 import nbu_format as N                                     # noqa: E402
 
 BASE = 0xC0000000
-try:            # the camera FPSUP_CAMERA names: the fp's UI-data addresses, mapped (fwtarget)
-    from fwtarget import fw as _fw
-except ImportError:                                       # pragma: no cover
-    def _fw(a):
-        return a
+# the camera FPSUP_CAMERA names: fp addresses mapped (fp_usb_shell/fwtarget.py); no silent fallback
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[4] / 'fpSup' / 'fp_usb_shell'))
+from fwtarget import fw as _fw                          # noqa: E402
 # rank (fps x 100), the stock internal it rides on, that rate's export, CSV text, label
 VRATES = ((23976, 7, 10, '239.76 fps', '239.76'),
           (27972, 7, 10, '279.72 fps', '279.72'),

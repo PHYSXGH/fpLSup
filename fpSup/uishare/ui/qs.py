@@ -26,11 +26,16 @@ import functools
 import json
 import pathlib
 import struct
+import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 RECIPE = HERE / 'qs_recipe.json'
 ROOT = HERE.parents[2]
-IMAGE = ROOT / 'out' / 'MAIN_c0000000.bin'
+# the camera FPSUP_CAMERA names: the recipe's addresses are the fp's, mapped (fwtarget)
+sys.path.insert(0, str(ROOT / 'fpSup' / 'fp_usb_shell'))
+import fwtarget                                          # noqa: E402
+_fw = fwtarget.fw
+IMAGE = ROOT / ('out' if fwtarget.target() == 'fp' else 'out_' + fwtarget.target()) / 'MAIN_c0000000.bin'
 
 SHARED_QS, SHARED_SET, SHARED_FONT, OWN_SET = 0, 1, 2, 3
 DONE, WROTE, CONFLICT, SKIP = 'done', 'wrote', 'conflict', 'skip'
@@ -52,7 +57,7 @@ def image():
 
 def stock(row, img=None):
     img = img or image()
-    a = int(row['address'], 16) - 0xC0000000
+    a = _fw(int(row['address'], 16)) - 0xC0000000
     return img[a:a + row['length']]
 
 
@@ -214,7 +219,7 @@ def encode():
             edits += _edits(row['edits'])
         if e > 0xFFFF or a > 0xFF or b > 0xFFFF:
             raise QsError(f'{row["address"]}: does not fit the table')
-        rows += struct.pack('<IIHBBHH', int(row['address'], 16), int(row['fnv'], 16),
+        rows += struct.pack('<IIHBBHH', _fw(int(row['address'], 16)), int(row['fnv'], 16),
                             row['length'], RULES[rule], a, b, e)
     nmax = r['n_max']
     fns = bytearray()
