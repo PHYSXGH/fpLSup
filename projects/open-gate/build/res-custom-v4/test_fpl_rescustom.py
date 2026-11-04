@@ -88,6 +88,25 @@ class FplBuildTests(unittest.TestCase):
                          {'OG4K23_98FPS', 'OG4K24FPS', 'OG4K25FPS', 'OG4K29_97FPS'})
         self.assertTrue(all(e['donor'] == 98 for e in d['entries']))
 
+    def test_10_and_12_bit_follow_the_stock_profiles(self):
+        """OG4K and OG48K offer 8/10/12; the core writes canvas +0x80/+0x84 by the picked depth with the
+        fp L's stock values (p2061 / p2391 / p2721, UHD 23.98 8 / 10 / 12-bit: 9,10 / 9,9 / 7,7)"""
+        import rcd
+        sys.path.insert(0, str(ROOT / 'projects' / 'fpl-port' / 'tools'))
+        import canvas_compare as C
+        cols = C.columns(self.img, C.FPL['builder'])
+        stock = []
+        for pid in (2061, 2391, 2721):
+            row = word(self.img, C.FPL['mapping'] + 4 * pid)
+            stock.append((word(self.img, cols[0x80] + 4 * row), word(self.img, cols[0x84] + 4 * row)))
+        self.assertEqual(stock, [(9, 10), (9, 9), (7, 7)])
+        src = (HERE / 'ogc.c').read_text()
+        self.assertIn('W(canvas + 0x80) = bd == BD12 ? 7u : 9u;', src)
+        self.assertIn('W(canvas + 0x84) = bd == BD8 ? 10u : bd == BD10 ? 9u : 7u;', src)
+        for name in ('OG4K', 'OG48K'):
+            d = rcd.decode((self.out / 'RESCUS' / f'{name}.RCD').read_bytes(), self.img, None)
+            self.assertEqual(d['bit_depths'], (8, 10, 12), name)
+
     def test_og4k_resize_is_stock_p2001s(self):
         """canvas +0x60/+0x64/+0xD0/+0xD4: the read -> raster downscale x 1024.  OG4K reads mode 98's
         2x-binned 4784 wide into 3856 -- stock p2001's ratio (4784x2700 -> 3856x2170), not its base

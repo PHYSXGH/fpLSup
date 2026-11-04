@@ -520,3 +520,21 @@ UHD clips likewise). Longer takes need a fast card or an external SSD (the fp L 
 Rates for the SSD test (MB/s, decimal): OG48K (15.31 MB a frame) 17.98 ~275, 23.98 ~367, 24 ~367, 25 ~383,
 29.97 ~459; OG4K (9.98 MB) ~180 / ~240 / ~240 / ~250 / ~300. The user expects the SSDs to sustain
 350-400 MB/s or more.
+
+## 10 / 12-bit (static, 2026-11-04)
+Stock UHD 23.98 per depth: p2061 / p2391 / p2721 (8-bit block 2001..2329, 10-bit 2331..2659, 12-bit
+2661..2989; empty slots parallel to the 8-bit pool at +330 / +660). Their canvases differ only in +0x80 /
++0x84 (9,10 / 9,9 / 7,7) -- and p2721 reads the 2x-binned 4784 like our formats. The fp's core writes
++0x80 = 10 for 8/10-bit; the fp L's stock value is 9 (OGC_FPL). No firmware code found that classifies
+a profile id by block (the classifier flags all of 2001..2989 as 8; the 0xA64 "2660" uses are offsets
+and addresses). So one virtual id (8-bit block) for all depths, the depth by the picker's table
+(pick8/10/12 -> S.BITLATCH -> canvas +0x80/+0x84), as on the fp. If 10/12-bit record as 8-bit or fail,
+next: per-depth ids from the 10/12-bit blocks.
+Card r9 (`cards/20261104-rescustom-bitdepth-r9`): core `af0fcc41…`, OG4K.RCD `0c28185d…`, OG48K.RCD
+`6feec29c…`, both 8/10/12-bit.
+**10 / 12-bit on the camera (r9, 2026-11-04): they record.** OG4K, all 3856x2568: A001_144 (23.98, 10-bit,
+66 frames), 145 (23.98, 12-bit, 52), 146 (17.98, 8-bit, 28), 147 (17.98, 10-bit, 23), 148 (17.98, 12-bit,
+37). BitsPerSample 10 / 12 with WhiteLevel 1023 / 4095 and BlackLevel 64 / 256 (8-bit: 8 bits, its
+4095 / 256 as stock), frame sizes 12,456,960 / 14,932,480 / 9,982,464 B; clean pictures, steady
+exposure. So one virtual id in the 8-bit block serves every depth: the depth goes by the picker's table
+and canvas +0x80/+0x84. 8-bit still records with +0x80 = 9.

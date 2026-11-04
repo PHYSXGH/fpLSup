@@ -1204,7 +1204,12 @@ u32 ogc_canvas(u8 *S, u32 canvas, u32 pid)
         u32 f = SW(S, S_FPSLATCH);
         if (f) W(canvas + 0x30) = f;
         u32 bd = SW(S, S_BITLATCH);
+#ifdef OGC_FPL
+        /* the fp L's stock CinemaDNG profiles (p2061 / p2391 / p2721): +0x80 9 / 9 / 7 */
+        W(canvas + 0x80) = bd == BD12 ? 7u : 9u;
+#else
         W(canvas + 0x80) = bd == BD12 ? 7u : 10u;
+#endif
         W(canvas + 0x84) = bd == BD8 ? 10u : bd == BD10 ? 9u : 7u;
         m12_legacy_canvas(S, canvas, pid);
 #ifdef OGC_CAP_BACK

@@ -77,7 +77,9 @@ ROWS = {
                    (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
         rate_canvas=[],
         row_text='%s %dx%d' % (LABEL, ACT[0], ACT[1]), summary=LABEL,
-        bit_depths=(8,),                  # the virtual ids are in the 8-bit CinemaDNG block (ogc_layout)
+        # 10/12-bit: one virtual profile id (the 8-bit CinemaDNG block) for all three; the depth goes
+        # by the picker's table (pick8/10/12) into canvas +0x80/+0x84, as stock p2061/p2391/p2721
+        bit_depths=(8, 10, 12),
     ),
     # UHDX (diagnostic, 2026-11-04): stock UHD under a new name -- the UHD 23.98 sensor mode 161 with its
     # own timing, the stock UHD 8-bit video profile p2061, no canvas change, 16:9, no clamp.  Every
@@ -122,7 +124,9 @@ ROWS = {
                    (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
         rate_canvas=[],
         row_text='OG4K %dx%d' % OG4K_ACT, summary='OG4K',
-        bit_depths=(8,),                  # the virtual ids are in the 8-bit CinemaDNG block (ogc_layout)
+        # 10/12-bit: one virtual profile id (the 8-bit CinemaDNG block) for all three; the depth goes
+        # by the picker's table (pick8/10/12) into canvas +0x80/+0x84, as stock p2061/p2391/p2721
+        bit_depths=(8, 10, 12),
     ),
 }
 
