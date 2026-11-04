@@ -384,3 +384,13 @@ from the R68 rows (FUN_c051c490: row +0 id, +4 the mode whose adjustment it uses
 real ids only -- colourful vertical lines fit wrong column/defect correction. Not yet: how it finds the
 recording mode's entry at record start. (The 0xD9 compares in AfMgr are the 7 x 31 AF grid, not mode ids.)
 Fallback that already works: virtual ids taken from real mode ids.
+
+**id 3 vs 230 with fnprobe on SensorAdjustment (2026-11-04).** With id 3 (records): SensorAdjustment's
+builders (0xC051C490, 0xC05227D8) are never called at record start -- not the path. The geometry helper
+0xC032C930 is called with the recording id (3) from **0xC0316224, in ImagerController (ImagerDefect.cpp /
+ImagerMode.cpp)**, and with 0x77 ("current mode") from 0xC0685xxx (CoordinateMgr / AfLogParser area).
+The failing run (230) was not captured (the poller had hung). 0xC03161F0 (the ImagerDefect-side caller)
+first calls 0xC032D0D8(out, mode): a mode id from 0xC0122050 (Thumb, outside the sensor module) goes to
+0xC0324818 (R28 row, hooked), 0xC032D078 / 0xC032D0A8 (geometry, hooked) and 0xC032DF58 (not read yet).
+Next: 0xC032DF58, 0xC0122050 and the defect-correction setup that follows in 0xC03161F0 -- defect /
+column correction keyed by the imager mode is the best fit for the vertical lines.
