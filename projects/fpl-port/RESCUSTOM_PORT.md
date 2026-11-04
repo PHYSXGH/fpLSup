@@ -359,3 +359,15 @@ mode-switch routine 0xC0207D38 (target mode at object +0x48), which calls 0xC031
 So the image path breaks at record start before any sensor mode change is even requested -- in the step
 that reconfigures the image pipeline for the recording entry, which reads the entry (its mode 230) and
 works with 161. None of the per-mode lookups (cmpprobe), inline scans (wideprobe) or compares saw 230 there.
+
+**Who reads the entry's sensor mode (2026-11-04, cont.).** The only firmware reader of the recording
+entry's mode (+8) is the helper 0xC0437290 ("ask the configurator for the entry, return its mode"); the
+other configurator users read its profile (+4, into the canvas code the core handles) or work on the
+pipeline object v5 picked. Its 21 callers: the four fps sites the core hooks (+ a fifth at 0xC068704C,
+0xC032C820 = the geometry row's fps, the clone answers), two 12-byte tables (0xC0910F28: five stills
+modes, 161 is not in it either -> no difference), the AE program-line model, a pipeline job that stores
+the mode at +0x60 (0xC0374480), comparisons. `tools/probe/idswap.py` gave all 21 the donor id (161)
+instead of 230: still the lines; only the per-frame fps site was even called before the camera died.
+So nothing reads the virtual id directly at record start. Remaining: the image pipeline breaks first
+(the sensor-control task's per-frame loop freezes at the press), from something that depends on the id
+only through the core's own answers -- the fake row indices, vm_zoom, R10 -- as the fp L uses them.
