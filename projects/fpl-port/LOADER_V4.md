@@ -134,3 +134,18 @@ image is also linked as `out*/seg0_c0000000.bin`; Pillow and lz4 in `projects/fp
 
 **Card r4** `cards/20261104-loader-v4-r4-page` (`build_v4.py --card`): r3 plus the page. AutoRun identical
 to r3's (`1c8794ce…`), LOADER `07628179…`, `UI\FPSUP.BIN`, `UI\SUPMGR.BIN`. The page: SYSTEM menu, page 6.
+
+**r4 on the camera (2026-11-04):** the fpSup page shows on SYSTEM page 6 and is usable (user). LOAD.LOG:
+
+```
+01 0025436A           START
+11 00000002           LISTED
+32 00000000 0 LOADER.BIN           UI: page hooks installed
+0A C5353A80 0 SUPMGR.BIN           LOADED (cached alias)
+0A 453716C0 4 USB-Shell_v3.4.0.BIN LOADED, 4 patches
+32 00000100 1 LOADER.BIN           UI: page 0 with 1 row (SupManager)
+0E 3 3                DONE
+```
+
+No REPAIRED. Phase 1 (Loader v4 on the fp L: core, SupManager, shell, splash, Fast Start 2/3, the fpSup
+page) is done.
