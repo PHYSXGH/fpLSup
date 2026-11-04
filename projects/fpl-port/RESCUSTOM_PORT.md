@@ -371,3 +371,16 @@ instead of 230: still the lines; only the per-frame fps site was even called bef
 So nothing reads the virtual id directly at record start. Remaining: the image pipeline breaks first
 (the sensor-control task's per-frame loop freezes at the press), from something that depends on the id
 only through the core's own answers -- the fake row indices, vm_zoom, R10 -- as the fp L uses them.
+
+**The id itself (2026-11-04, the decisive tests).**
+- `tools/probe/realidx.py`: every lookup for 230 returning mode 161's REAL row index (26) instead of the
+  fake index: still the lines. The fake indices are not the cause.
+- The virtual mode moved to **id 3** (a real IMX455 mode, binned 30p, unused by UHD), same cloned 161
+  rows, same entry, same profile: **UHDX records.** With 60 (free, not a real mode) or 230: lines.
+So the fp L keeps per-mode data that exists only for real mode ids and reaches it by the id itself -- no
+search or compare any probe saw. Leads: `SensorAdjustment` (src/library/CameraController/SensorAdjustment,
+0xC051xxxx; also the biggest caller of the mode-change message) builds per-mode adjustment data at boot
+from the R68 rows (FUN_c051c490: row +0 id, +4 the mode whose adjustment it uses, +0x60/+0x64), i.e. for
+real ids only -- colourful vertical lines fit wrong column/defect correction. Not yet: how it finds the
+recording mode's entry at record start. (The 0xD9 compares in AfMgr are the 7 x 31 AF grid, not mode ids.)
+Fallback that already works: virtual ids taken from real mode ids.
