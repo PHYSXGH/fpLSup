@@ -53,6 +53,17 @@ def main():
     if sys.argv[1] == 'chain':
         return chain(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else
                      os.path.join(HERE, '..', '..', '..', '..', 'out_fpl', 'MAIN_c0000000.bin'))
+    if sys.argv[1] == 'cmpdecode':                   # cmpdecode FILE: the compare counters (CMPPROBE_COUNTS=1)
+        os.environ['CMPPROBE_COUNTS'] = '1'
+        src = open(os.path.join(HERE, 'cmpprobe.py')).read().split('\ndef setw')[0]
+        g = {'__file__': os.path.join(HERE, 'cmpprobe.py'), '__name__': 'x'}
+        exec(src.replace('import putfile as P, cave', ''), g)
+        d = open(sys.argv[2], 'rb').read()
+        for k, (site, reg, what) in enumerate(g['SITES']):
+            hits, total = struct.unpack_from('<2I', d, 8 * k)
+            if hits or total:
+                print(f'  {site:#010x} {what:13s} total {total:8d}' + (f'   SEARCHED FOR {g["VMID"]}: {hits}' if hits else ''))
+        return
     if sys.argv[1] == 'decode':
         fns = [int(x, 16) for x in (sys.argv[3] if len(sys.argv) > 3 else os.environ['FNPROBE_FNS']).split(',')]
         return decode(sys.argv[2], fns)
@@ -60,8 +71,13 @@ def main():
     sys.path.insert(0, HERE)
     import fnprobe as F
     os.environ.setdefault('FPSUP_CAMERA', 'fpl')
-    if sys.argv[1] in ('install', 'stack'):
-        if sys.argv[1] == 'install':
+    if sys.argv[1] in ('install', 'stack', 'cmp'):
+        if sys.argv[1] == 'cmp':                      # cmpprobe (CMPPROBE_COUNTS=1): the compare counters
+            import cmpprobe as C
+            C.install()
+            cst = json.load(open(C.STATE))
+            area, size = cst['recs'], len(C.SITES) * C.REC
+        elif sys.argv[1] == 'install':
             F.install()
             fst = json.load(open(F.STATE))
             area, size = fst['base'], len(F.FNS) * (F.STUB + F.REC)

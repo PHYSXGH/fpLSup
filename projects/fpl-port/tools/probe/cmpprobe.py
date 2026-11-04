@@ -33,8 +33,10 @@ SITES = [
 ACTIVE = {0xC008AA9C, 0xC021DC1C, 0xC0221FE4, 0xC02DB928, 0xC032C6F4, 0xC032CF34, 0xC033E1A4, 0xC034542C,
           0xC050AEE0, 0xC0324C84, 0xC0324CE8, 0xC0324D4C, 0xC03250AC, 0xC032C628, 0xC0324FDC, 0xC0325044,
           0xC03240E8}
-SITES = [x for x in SITES if x[0] in ACTIVE]
-NW, REC = 22, 48                 # stub words; record: hits, total, ring index, the last 8 ids searched
+COUNTS = os.environ.get('CMPPROBE_COUNTS') == '1'   # all sites, counts only (hits, total): fits with sdtrig
+if not COUNTS:
+    SITES = [x for x in SITES if x[0] in ACTIVE]
+NW, REC = (15, 8) if COUNTS else (22, 48)                 # stub words; record: hits, total, ring index, the last 8 ids searched
 
 
 def setw(a, v):
@@ -68,7 +70,32 @@ def flush():
     call(F_ICACHE)
 
 
+def stub_counts(site, reg, orig, rec):
+    """the compact stub: hits (wanted id == VMID) at rec+0, total at rec+4"""
+    r = REGS[reg]
+    get = {2: 0xE59D3000, 3: 0xE59D3004}.get(r, 0xE1A03000 | r)   # r3 = the wanted id (r2/r3 from the stack)
+    w = [0xE92D000C,            # 0  push {r2, r3}
+         0xE59F202C,            # 1  ldr r2, [pc, #0x2c] -> rec (word 14)
+         get,                   # 2
+         0xE3530000 | VMID,     # 3  cmp r3, #VMID
+         0x05923000,            # 4  ldreq r3, [r2]
+         0x02833001,            # 5  addeq r3, r3, #1
+         0x05823000,            # 6  streq r3, [r2]       hits
+         0xE5923004,            # 7  ldr r3, [r2, #4]
+         0xE2833001,            # 8  add r3, r3, #1
+         0xE5823004,            # 9  str r3, [r2, #4]     total
+         0xE8BD000C,            # 10 pop {r2, r3}
+         orig,                  # 11 the replaced compare
+         0xE51FF004,            # 12 ldr pc, [pc, #-4]
+         site + 4,              # 13
+         rec]                   # 14
+    assert len(w) == 15
+    return w
+
+
 def stub(site, reg, orig, rec):
+    if COUNTS:
+        return stub_counts(site, reg, orig, rec)
     r = REGS[reg]
     get = {1: 0xE59D3000, 2: 0xE59D3004, 3: 0xE59D3008}.get(r, 0xE1A03000 | r)  # r3 = the wanted id
     w = [0xE92D000E,            # 0  push {r1, r2, r3}
@@ -129,8 +156,11 @@ def snapshot():
     out = []
     for k, (s, _, what) in enumerate(SITES):
         w = r[n * k: n * k + n]
-        i = w[2]
-        ring = [w[3 + ((i - 1 - j) & 7)] for j in range(min(i, 8))]       # newest first
+        if COUNTS:
+            ring = []
+        else:
+            i = w[2]
+            ring = [w[3 + ((i - 1 - j) & 7)] for j in range(min(i, 8))]   # newest first
         out.append((s, what, w[0], w[1], ring))
     return out
 
@@ -174,4 +204,5 @@ def remove():
     print('restored')
 
 
-{'install': install, 'read': read, 'poll': poll, 'remove': remove}[sys.argv[1]]()
+if __name__ == '__main__':
+    {'install': install, 'read': read, 'poll': poll, 'remove': remove}[sys.argv[1]]()

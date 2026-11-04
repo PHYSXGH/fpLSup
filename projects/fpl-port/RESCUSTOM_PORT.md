@@ -414,3 +414,14 @@ lookup falls back to pair 0 for an id it does not know -- a real id (3) finds it
 mode (161 -> 2, 3 -> 1, ...); the core answers its virtual mode itself with the donor's value (R10OK 1,
 R10 2). No fallback to pair 0. ImagerMode / ImagerShoot (0xC0319050..) reach the per-mode data through
 the hooked lookups as well. Still open: what keys on the id number itself.
+
+**id tests and memory searches (2026-11-04, cont.).** Virtual id 98 (real) records; 1 (free, small) gives
+the lines -- it is membership in the firmware's mode set, not the number's size. No structure in RAM marks
+the real ids: ramdump/ramsearch(2)/ramsearch_hi over 0xC0B00000-0xC0E00000, 0xC2D00000-0xC8000000 and
+the whole upper gigabyte (0x80000000-0xBFFFFFFF, physical RAM only the uncached window reaches; dumped
+through MEM1 in 8 MiB pieces -- a 16 MiB request is over the worker's limit and wedges the shell): no
+bitmap, id->index / id->pointer map, per-id "present" record (zero or constant absent), or id list. The
+descriptor holds only the tables the core already covers. The six inline R10 scans (0xC03EBAE0..) are the
+factory test commands (mode_list, testpattern, adj_init ...). So the membership test is a search of the
+mode tables themselves; next: cmpprobe on all 29 loops, its counters written to the card by sdtrig
+(`CMPPROBE_COUNTS=1 sdprobe.py cmp`), so a search for 230 just before the camera dies is kept.
