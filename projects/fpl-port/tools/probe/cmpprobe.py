@@ -33,6 +33,9 @@ SITES = [
 ACTIVE = {0xC008AA9C, 0xC021DC1C, 0xC0221FE4, 0xC02DB928, 0xC032C6F4, 0xC032CF34, 0xC033E1A4, 0xC034542C,
           0xC050AEE0, 0xC0324C84, 0xC0324CE8, 0xC0324D4C, 0xC03250AC, 0xC032C628, 0xC0324FDC, 0xC0325044,
           0xC03240E8}
+# the stubs write their records through the uncached alias, so a DMA reader (the card write) sees them
+# at once: 0xC0000000.. is the cached window onto physical 0x40000000.., which 0x40000000.. maps uncached
+UNCACHED_DELTA = 0x80000000
 COUNTS = os.environ.get('CMPPROBE_COUNTS') == '1'   # all sites, counts only (hits, total): fits with sdtrig
 if not COUNTS:
     SITES = [x for x in SITES if x[0] in ACTIVE]
@@ -134,10 +137,10 @@ def install():
     recs = base + n * NW * 4
     for k, ((s, reg, _), w0) in enumerate(zip(SITES, orig)):
         st, rec = base + k * NW * 4, recs + k * REC
-        for i, x in enumerate(stub(s, reg, w0, rec)):
+        for i, x in enumerate(stub(s, reg, w0, rec - UNCACHED_DELTA)):
             setw(st + 4 * i, x)
         for i in range(REC // 4):
-            setw(rec + 4 * i, 0)
+            setw(rec - UNCACHED_DELTA + 4 * i, 0)
     flush()
     for k, (s, _, _) in enumerate(SITES):
         st = base + k * NW * 4
@@ -150,7 +153,7 @@ def install():
 def snapshot():
     st = json.load(open(STATE))
     n = REC // 4
-    r = P.mem_get(st['recs'], len(SITES) * n)
+    r = P.mem_get(st['recs'] - UNCACHED_DELTA, len(SITES) * n)
     if not r or None in r:
         return None
     out = []

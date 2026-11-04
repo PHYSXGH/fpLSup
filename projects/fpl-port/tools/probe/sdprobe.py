@@ -76,7 +76,7 @@ def main():
             import cmpprobe as C
             C.install()
             cst = json.load(open(C.STATE))
-            area, size = cst['recs'], len(C.SITES) * C.REC
+            area, size = cst['recs'] - C.UNCACHED_DELTA, len(C.SITES) * C.REC   # the uncached alias
         elif sys.argv[1] == 'install':
             F.install()
             fst = json.load(open(F.STATE))
