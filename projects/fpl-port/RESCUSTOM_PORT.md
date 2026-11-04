@@ -272,3 +272,53 @@ test_ui_strings / test_layer_compat / test_qs_c pass.
 
 Card: `cards/20261104-rescustom-og48k-r1` = card r4 (rebuilt, byte-identical) + `fpSup\RES-Custom_v0.1.5.BIN`
 (`33537573…`) + `fpSup\RESCUS\OG48K.RCD` (`2015d873…`).
+
+**OG48K on the camera (r1, 2026-11-04):** live view showed the 3:2 open gate; recording (at the virtual
+17.98) crashed the camera at once (colourful lines, battery pull, no file). Reading: the recording engine
+got a 4784-wide raster where its stock maximum is UHD's 3856 -- the raster is what it processes (stock FHD
+reads 3184x1796 and records 1936x1090; UHD reads 9568x5382 and records 3856x2170; Jose's fp OG4K records
+3840x2560 from a 6030x4020 read). Not built any more (kept in fpl_formats.py as the record).
+
+**OG4K (r2):** Jose's fp OG4K recipe: base p2061 (the stock UHD 8-bit CinemaDNG video profile, flag 8 like
+his p171), raster 3856x2568 / active 3840x2552 / preview 1296x861, 1280x851 (the stock 3840x2552 still
+p1004's), read mode 98's binned 4784x3190 at scale 2.0 (1.24x down on both axes), UHD's resolution value
+(3), clamp on. 9.9 Mpx (his: 9.8). Card `cards/20261104-rescustom-og4k-r2`.
+
+**OG4K on the camera (r2, 2026-11-04):** the same crash at record start. So not (only) the raster width. Next,
+card r3: **UHDX**, stock UHD under a new name (mode 161 at its exact stock timing through the capture-timing
+section, base p2061, no canvas change, 16:9) -- separates the core's recording path from the open-gate content.
+
+**UHDX on the camera (r3) and the USB probe (2026-11-04):** UHDX crashed too, so it is the core, not the
+open-gate content. The probe: live view makes no picker call; record calls it ~31 times, each returning our
+entry {type 5, profile 34, mode 230, stock timing}; then the whole camera stops, no assertion. The lead: our
+profile ids (34..50) carry no classifier flag -- on the fp L that is the still-profile class (1001..) --
+where every stock CinemaDNG profile is 2001..2989 (flag 8). Card r4 moves the pool into the CinemaDNG
+8-bit block's empty slots (2020, 2040, ..., 2325) and offers UHDX in 8-bit only.
+
+## The recording crash, narrowed on the camera (2026-11-04, USB, RAM only)
+
+Tools: `tools/probe/recdiag.py` (the core's state found from the pick8 veneer, the entry it hands out,
+the virtual-mode record; `setent PID MODE` edits the 23.98 entry live; the assertion routine 0xC0011100
+hooked) and `tools/probe/vecprobe.py` (VBAR 0xC0000000, literal vectors; a catcher on undefined /
+prefetch abort / data abort that records the first fault and parks the task). Card r4 (UHDX, profile pool
+2020..2325), always 23.98 CinemaDNG 8-bit:
+
+| entry handed to the camera | result |
+|---|---|
+| p2061 + mode 161 (stock ids, our entry in our memory) | records |
+| p2020 (our virtual profile) + mode 161 | records |
+| p2020 + mode 230 (our virtual mode; r1..r4) | crash |
+| p2020 + mode 60 (the virtual mode moved below the fp L's 217) | crash |
+
+- Live view never calls the recording lookups; record calls the picker about 20 times a second.
+- The virtual mode's six cloned rows equal mode 161's word for word except the id; the register row
+  (regfilled) was still unfilled when it crashed.
+- The configurator's consumer (v5, 0xC043C2E8) recognises entries only by address range, as on the fp:
+  our entry falls through to the same pipeline in every test, so not that. The index lookups' callers are
+  the fp's code instruction for instruction.
+- **No CPU fault**: with the catcher on, nothing was caught, and the shell kept answering for about a
+  minute after the colourful lines appeared. So the image / recording hardware is set up wrong from
+  something selected by the mode id, and the system dies later -- not a bad pointer in the CPU.
+
+Next (user, option 2): no invented mode id on the fp L. The entry carries the donor's real id, and while
+a res-custom row is live the core's lookup hooks give that id the format's rows.

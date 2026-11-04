@@ -181,7 +181,14 @@ VPID_POOL = [74, 75, 76, 77, 78, 79, 47, 48, 49, 50, 52, 54, 55, 56, 57, 58, 59,
 PROFILE_CLASSES = (((1, 33), (51, 83), (101, 989), (1771, 1838), (1841, 1978), (2001, 2989)) if FPL else
                    ((0, 4), (5, 11), (17, 40), (101, 129), (131, 198), (301, 312), (401, 434)))
 if FPL:
-    VPID_POOL = list(range(34, 51)) + list(range(84, 91)) + list(range(97, 101))
+    # 2026-11-04, camera: with ids 34.. (no classifier flag, the fp L's still-profile class) every
+    # recording crashed the camera at once, even UHDX (stock UHD under a new name) -- the picker had
+    # handed out our entry 31 times (probe recdiag).  The fp L's CinemaDNG profiles are 2001..2989
+    # (flag 8): 8-bit 2001..2329, 10-bit 2331..2659, 12-bit 2661..2989 (the firmware checks the 2660
+    # boundary).  The pool: the empty mapping slots of the 8-bit block (test: 8-bit recording only).
+    VPID_POOL = [2020, 2040, 2060, 2080, 2114, 2115, 2149, 2150, 2184, 2185, 2219, 2220, 2254, 2255,
+                 2289, 2290, 2324, 2325]
+    VPID_CLASS = (2001, 2329)          # the pool's required range (the CinemaDNG 8-bit block)
     MAX_VARS = len(VPID_POOL)
 # the highest profile id a data file may name (the mapping table's extent): the fp's table
 # (0xC0BD05D4) has 500 entries, bounded at 0x200 as always; the fp L's (0xC0BF6820) 4,000
@@ -259,7 +266,7 @@ CLAMP = ((0x04, 0x00000008), (0x18, 0x0000C000))   # the video clamp bits in the
 ENUM_RES_BASE = 0x4D4E4500    # uishare ui/enums.py UIS_RES_ENUM_BASE
 VPID0, VMID0 = 74, 230        # empty mapping slots 74..79 (class 0, like p83/p13); free mode ids 230..245
 if FPL:
-    VPID0 = VPID_POOL[0]       # 34..39 (provisional, above); mode ids 230.. are free on the fp L too (IMX455 ids <= 217)
+    VPID0 = VPID_POOL[0]       # not consecutive on the fp L (the core reads S.POOL); mode ids 230.. are free there too (IMX455 ids <= 217)
 
 # ---- C entry points (S.FN + 4*i) and hook slots (S.NEXT + 4*i) ----------------
 FNS = ['PICK', 'SEL', 'FMT', 'CANVAS', 'NAME', 'OUT', 'VLOOK', 'V32', 'AC38', 'FPS', 'CMT', 'SAVE',

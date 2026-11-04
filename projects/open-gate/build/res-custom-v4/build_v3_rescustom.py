@@ -72,7 +72,7 @@ if L.FPL:
     # the five are IMX410 formats: their donor modes are fp sensor modes the fp L
     # (IMX455) does not have, so rcd.decode refuses them (ENTRY).  fp L formats are
     # port phase 3 (projects/fpl-port/RESCUSTOM_PORT.md); until then the core ships alone
-    FORMATS = ('og48k',)               # fpl_formats.py (phase 3)
+    FORMATS = ('uhdx',)                # fpl_formats.py (phase 3: og48k and og4k crashed recording; the diagnostic)
 JOSE = ('s16', 'og35k', 'og4k')       # jose_formats.py (milestone 5)
 GEOMETRY = {'OG3K': 'OG3K 3008x2000', 'OG2K': 'OG2K 2000x1334'}   # the menu sups' row texts
 
@@ -129,11 +129,16 @@ def row_data(target, tmp):
 
 
 def check_ids(image):
-    if len(set(L.VPID_POOL)) != L.MAX_VARS or L.VPID_POOL[:L.MAX_ROWS] != list(range(L.VPID0, L.VPID0 + L.MAX_ROWS)):
+    if len(set(L.VPID_POOL)) != L.MAX_VARS or (
+            not L.FPL and L.VPID_POOL[:L.MAX_ROWS] != list(range(L.VPID0, L.VPID0 + L.MAX_ROWS))):
         raise BuildError('the virtual profile pool')
     for pid in L.VPID_POOL:
         if word(_fw(L.MAPPING) + 4 * pid, image) != 0xFFFFFFFF:
             raise BuildError(f'virtual profile {pid}: the mapping slot is not empty')
+        if L.FPL:                       # the fp L: inside its CinemaDNG class (ogc_layout.VPID_CLASS)
+            if not L.VPID_CLASS[0] <= pid <= L.VPID_CLASS[1]:
+                raise BuildError(f'virtual profile {pid} is outside the CinemaDNG block {L.VPID_CLASS}')
+            continue
         for lo, hi in L.PROFILE_CLASSES:
             if lo <= pid <= hi:
                 raise BuildError(f'virtual profile {pid} falls in FUN_c043a1c8 class {lo}..{hi}')

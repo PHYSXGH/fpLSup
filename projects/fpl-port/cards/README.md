@@ -446,3 +446,56 @@ To check, in order: (1) boots as r4 did; LOAD.LOG has `RES-Custom_v0.1.5.BIN` LO
 out. The camera saves its own settings at power-off; the core's save hook (the `save` site) puts the stock
 resolution there instead of OG48K's, as on the fp -- not yet seen on the fp L, so step (5) checks it.
 Fast Start 3 is on from r3.
+
+**r1 on the camera (2026-11-04, the user):** OG48K selectable, frame rate set to 17.98 (the core's virtual rate);
+live view showed the 3:2 open-gate image. Starting a recording CRASHED the camera at once (colourful lines
+across the screen; only a battery pull recovered it). No file written. LOAD.LOG of that boot:
+
+```
+01 002466CD           START
+11 00000003           LISTED
+32 00000000 0 LOADER.BIN           UI: page hooks
+0D OCD01010100                     res-custom: 1 file found, accepted, 1 row
+0D OCO00000001                     res-custom: 1 menu row installed
+0A C5353A80 0x71 RES-Custom_v0.1.5.BIN   LOADED, 113 patches
+0A C5439880 0 SUPMGR.BIN
+0A 454574C0 4 USB-Shell_v3.4.0.BIN
+32 00000100 2 LOADER.BIN           UI: page 0 with 2 rows
+0E 4 4                DONE
+```
+
+Reading: everything up to live view works (menu, picker, virtual mode, binned readout). The recording
+engine then got a 4784-wide raster; its stock maximum is UHD's 3856 (FHD reads 3184 and records a 1936
+raster; Jose's fp OG4K is 3840 wide). Second variable: 17.98 is the virtual-rate path.
+
+## 20261104-rescustom-og4k-r2 (not on the camera yet)
+
+r1 with `RESCUS\OG4K.RCD` (`2bff2b83…`) in place of OG48K.RCD; the core is the same bytes (`33537573…`).
+OG4K = Jose's fp OG4K recipe on the fp L: base p2061 (stock UHD 8-bit CinemaDNG video profile), raster
+3856x2568 / active 3840x2552 / preview from p1004 (the stock 3840x2552 still), full-sensor binned read
+(mode 98, 4784x3190) downscaled 1.24x, UHD's resolution value. Test 23.98 first, CinemaDNG 8-bit, a
+few seconds (one variable: the raster size); then 17.98 separately.
+
+**r2 on the camera (2026-11-04, the user):** "the same thing happened" -- OG4K (3840-wide raster) also
+crashed at record start, after the same clean load (LOAD.LOG as r1's: OCD01010100, OCO00000001, LOADED
+0x71). So the raster width was not (or not alone) the cause. Checked since: the aspect table is the same on
+both cameras (2 = 3:2), and the recording-side hooks (bulk, hdrcopy) act only for M12 240p.
+
+## 20261104-rescustom-uhdx-r3 (diagnostic, not on the camera yet)
+
+r2 with `RESCUS\UHDX.RCD` (`34c8cc2a…`) in place of OG4K.RCD; the core is the same bytes. UHDX is stock UHD
+under a new name: sensor mode 161 with its exact stock 23.98 timing, the stock UHD 8-bit video profile p2061,
+no canvas change, 16:9, no clamp. Every res-custom path runs; nothing about the image changes.
+Records -> the core is fine and the open-gate content is the problem; crashes -> the core's recording path.
+
+**r3 on the camera (2026-11-04):** UHDX crashed the same way. USB probe (`recdiag.py`, RAM only: the
+assertion routine 0xC0011100 hooked, the core's state polled): selecting UHDX made the core live (FLAG 1,
+CUR 1) with no picker call -- live view does not use the recording lookups; pressing record called the
+picker 31 times in about a second, each returning our entry {type 5, profile 34, mode 230, the stock UHD
+23.98 timing}; about a second later the whole camera stopped (the shell too), no assertion.
+
+## 20261104-rescustom-uhdx-r4-cdngpid (not on the camera yet)
+
+The core rebuilt with the virtual profile ids moved into the fp L's CinemaDNG class: the 18 empty mapping
+slots of the 8-bit block (2020, 2040, ... 2325; ogc_layout.VPID_POOL). UHDX 8-bit only. Core
+`d55e286d…`, UHDX.RCD `a2375fd0…`. Test: UHDX, 23.98, CinemaDNG 8-bit, record.

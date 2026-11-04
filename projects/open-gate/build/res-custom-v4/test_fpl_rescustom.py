@@ -74,20 +74,25 @@ class FplBuildTests(unittest.TestCase):
     def replays(self):
         return {int(h['site'], 16): int(h['replay'], 16) for h in self.f['hooks']}
 
-    def test_the_open_gate_format_ships(self):
-        self.assertEqual(self.f['formats'], ['og48k'])
-        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['OG48K.RCD'])
+    def test_the_diagnostic_format_ships(self):
+        """OG48K and OG4K crashed recording on the camera (2026-11-04); UHDX, stock UHD under a new
+        name, separates the core's recording path from the open-gate content"""
+        self.assertEqual(self.f['formats'], ['uhdx'])
+        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['UHDX.RCD'])
 
-    def test_og48k_entries_carry_fp_l_keys_and_the_firmwares_own_30p_timing(self):
+    def test_uhdx_is_stock_uhd_23_98(self):
         import rcd
-        d = rcd.decode((self.out / 'RESCUS' / 'OG48K.RCD').read_bytes(), self.img, None)
-        self.assertEqual((d['profile'], d['base_row'], d['act']), (1003, 896, (4768, 3168)))
+        d = rcd.decode((self.out / 'RESCUS' / 'UHDX.RCD').read_bytes(), self.img, None)
+        self.assertEqual((d['profile'], d['base_row'], d['act'], d['aspect'], d['flags']),
+                         (2061, 1841, (3840, 2160), 3, 0))
         keys = {e['key']: e for e in d['entries'] if not e['vrate']}
-        self.assertEqual(set(keys), {'OG48K23_98FPS', 'OG48K24FPS', 'OG48K25FPS', 'OG48K29_97FPS'})
-        mode3 = struct.unpack_from('<3I', self.img, 0xC0B90FF8 + 0x20 * 83 - 0xC0000000)
-        self.assertEqual(mode3[0], 3)
-        e = keys['OG48K29_97FPS']
-        self.assertEqual((e['donor'], e['w0'], e['w1']), (98, mode3[1], mode3[2]))
+        self.assertEqual(set(keys), {'UHDX23_98FPS'})
+        tt = 0xC0B90FF8
+        m161 = next(struct.unpack_from('<3I', self.img, tt + 0x20 * i - 0xC0000000) for i in range(85)
+                    if struct.unpack_from('<I', self.img, tt + 0x20 * i - 0xC0000000)[0] == 161)
+        e = keys['UHDX23_98FPS']
+        self.assertEqual((e['donor'], e['w0'], e['w1']), (161, m161[1], m161[2]), 'the stock timing word for word')
+        self.assertTrue(all(off in (0x90, 0x1C) for off, _ in d['canvas_rec'] + d['canvas_pb']))
 
     def test_the_three_picks_are_bl_hooks_on_the_lookups_and_last(self):
         hooks = self.hooks()
@@ -126,13 +131,13 @@ class FplBuildTests(unittest.TestCase):
         import test_v4 as T4
         if T4.Uc is None:
             self.skipTest('needs unicorn')
-        rcdb = (self.out / 'RESCUS' / 'OG48K.RCD').read_bytes()
+        rcdb = (self.out / 'RESCUS' / 'UHDX.RCD').read_bytes()
         files, dirs = T4.card((NAME, self.core), extra=[('RESCUS', 0x10, 0)])
         files['\\fpSup\\LOAD.LOG'] = b''
         dirs['\\fpSup\\RESCUS'] = []
         if with_rcd:
-            files['\\fpSup\\RESCUS\\OG48K.RCD'] = rcdb
-            dirs['\\fpSup\\RESCUS'] = [('OG48K.RCD', 0x20, len(rcdb))]
+            files['\\fpSup\\RESCUS\\UHDX.RCD'] = rcdb
+            dirs['\\fpSup\\RESCUS'] = [('UHDX.RCD', 0x20, len(rcdb))]
         cam = T4.Camera(files, dirs)
         cam.boot()
         self.assertIsNone(cam.error)
@@ -145,7 +150,7 @@ class FplBuildTests(unittest.TestCase):
         T4, log = self.boot(False)
         self.assertIn((T4.CODES['RELEASED'], NAME), [(c, t) for c, _, _, t in log], log)
 
-    def test_with_og48k_the_claims_and_the_bit_menu_go_in(self):
+    def test_with_a_format_the_claims_and_the_bit_menu_go_in(self):
         """found 1, accepted 1, one row; then the claims, veneers and the bit-depth menu pass and the
         core reaches its menu rows (OCO: none here, the bare harness has no GUI -- the same point the
         fp core reaches with OG3K in this harness)"""
