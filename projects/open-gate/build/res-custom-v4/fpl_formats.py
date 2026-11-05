@@ -152,6 +152,12 @@ ROWS = {
 # and the core's solver gives every rate (23.98 .. 59.94) the stock timing.  A video mode: no clamp.
 # 8.1 MB a frame at 8-bit (59.94: ~490 MB/s).  Live view: 16:9 for now (aspect 3; the core has no
 # letterboxed live view yet), so it shows more height than is recorded.
+# The recording preview (canvas +0x0C / +0x10 buffer, +0x20 / +0x28 active, as p2061's 1288x724 /
+# 1280x720) must stay within PREVIEW_MAX_DOWN of the recorded raster on each axis: U48K with p2061's
+# preview (4784x2688 -> 1288x724, 3.71x both ways) flashed pink garbage over live view all through
+# every recording (camera, 2026-11-05) -- the only format beyond 3x down; W48K (3.71x across, 2.34x
+# down) did not, but its preview was squeezed unevenly.  Stock never goes beyond 3x.
+PREVIEW_MAX_DOWN = 3.0
 W48K_RASTER = (4784, 1696)
 W48K_ACT = (4768, 1680)
 W48K_READ = (4784, 1700)
@@ -167,6 +173,7 @@ ROWS['w48k'] = dict(
     canvas_rec=[(0x00, W48K_RASTER[0]), (0x04, W48K_RASTER[1]),
                 (0x24, W48K_ACT[0]), (0x2C, W48K_ACT[1]),
                 (0xDC, W48K_RASTER[0]), (0xE4, W48K_RASTER[1]),
+                (0x0C, 1616), (0x10, 572), (0x20, 1608), (0x28, 568),   # the preview (PREVIEW_MAX_DOWN)
                 (0xF4, W48K_READ[0]), (0xF8, W48K_READ[1]),
                 (0xFC, SCALE_2), (0x100, SCALE_2), (0x104, SCALE_2),
                 (0x60, OG48K_RESIZE), (0x64, OG48K_RESIZE), (0xD0, OG48K_RESIZE), (0xD4, OG48K_RESIZE)],
@@ -177,6 +184,38 @@ ROWS['w48k'] = dict(
                (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
     rate_canvas=[],
     row_text='W48K %dx%d' % W48K_ACT, summary='W48K',
+    bit_depths=(8, 10, 12),
+)
+
+# U48K (the user, 2026-11-05): mode 155's 4784x2700 2x2-binned read -- the full width at 16:9 (5400
+# of 6380 rows), the read stock UHD 29.97 / 12-bit scale down to 3856 -- recorded 1:1.  Modes
+# 155..158 differ only in frame length: one donor (155, 29.97), each stock rate at SIGMA's own words.
+# The band is too tall for 48 fps.  Live view: the stock 16:9 view shows exactly this area.
+# 12.9 MB a frame at 8-bit (29.97: ~385 MB/s).
+U48K_RASTER = (4784, 2688)
+U48K_ACT = (4768, 2672)
+U48K_READ = (4784, 2700)
+ROWS['u48k'] = dict(
+    label='U48K', profile=OG4K_BASE, enum=13,                   # uishare ui/enums.py 'U48K'
+    stock_value=3, aspect=3, flags=0, video_base=True,
+    donor_timing=(155, 0x026C0244, 0x000E102E),                 # hmax 580 | tail 620, vmax 4142 | x 14
+    capture_modes={2398: 158, 2400: 157, 2500: 156, 2997: 155},
+    rec=list(U48K_RASTER), act=list(U48K_ACT), prev_h=0,
+    modes=[(155, 2997, 580, 0, 14)],
+    canvas_rec=[(0x00, U48K_RASTER[0]), (0x04, U48K_RASTER[1]),
+                (0x24, U48K_ACT[0]), (0x2C, U48K_ACT[1]),
+                (0xDC, U48K_RASTER[0]), (0xE4, U48K_RASTER[1]),
+                (0x0C, 1616), (0x10, 908), (0x20, 1608), (0x28, 904),   # the preview (PREVIEW_MAX_DOWN)
+                (0xF4, U48K_READ[0]), (0xF8, U48K_READ[1]),
+                (0xFC, SCALE_2), (0x100, SCALE_2), (0x104, SCALE_2),
+                (0x60, OG48K_RESIZE), (0x64, OG48K_RESIZE), (0xD0, OG48K_RESIZE), (0xD4, OG48K_RESIZE)],
+    canvas_pb=[(0x0C, U48K_RASTER[0]), (0x10, U48K_RASTER[1]), (0x1C, 1),
+               (0x20, U48K_ACT[0]), (0x28, U48K_ACT[1]),
+               (0xD8, U48K_RASTER[0]), (0xE0, U48K_RASTER[1]),
+               (0xF4, U48K_RASTER[0]), (0xF8, U48K_RASTER[1]),
+               (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
+    rate_canvas=[],
+    row_text='U48K %dx%d' % U48K_ACT, summary='U48K',
     bit_depths=(8, 10, 12),
 )
 

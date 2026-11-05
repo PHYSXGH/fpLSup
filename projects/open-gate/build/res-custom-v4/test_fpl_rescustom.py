@@ -76,8 +76,9 @@ class FplBuildTests(unittest.TestCase):
 
     def test_the_formats_ship(self):
         """OG4K and OG48K; not UHDX (stock UHD under a new name would take every UHD-sized key, ogc_name)"""
-        self.assertEqual(self.f['formats'], ['og4k', 'og48k', 'w48k'])
-        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['OG48K.RCD', 'OG4K.RCD', 'W48K.RCD'])
+        self.assertEqual(self.f['formats'], ['og4k', 'og48k', 'w48k', 'u48k'])
+        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()),
+                         ['OG48K.RCD', 'OG4K.RCD', 'U48K.RCD', 'W48K.RCD'])
 
     def test_og4k_rides_on_mode_98(self):
         import rcd
@@ -313,6 +314,41 @@ class FplBuildTests(unittest.TestCase):
             self.assertEqual(e['donor'], 188)
             if e['rank'] in stock:
                 self.assertEqual((e['w0'], e['w1']), tt[stock[e['rank']]], e['key'])
+
+    def test_u48k_is_mode_155s_read_at_the_stock_timings(self):
+        """U48K: the 4784x2700 read (mode 155) recorded 1:1 at 4784x2688 / 4768x2672; each stock rate
+        has the timing words of SIGMA's own mode for it (155..158); nothing faster than 29.97"""
+        import rcd
+        d = rcd.decode((self.out / 'RESCUS' / 'U48K.RCD').read_bytes(), self.img, None)
+        self.assertEqual((d['profile'], d['act'], d['aspect'], d['flags']), (2061, (4768, 2672), 3, 0))
+        rec = dict(d['canvas_rec'])
+        self.assertEqual((rec[0x00], rec[0x04], rec[0xF4], rec[0xF8]), (4784, 2688, 4784, 2700))
+        tt = {}
+        for i in range(85):
+            w = struct.unpack_from('<3I', self.img, 0xC0B90FF8 + 0x20 * i - 0xC0000000)
+            tt[w[0]] = w[1:]
+        stock = {2398: 158, 2400: 157, 2500: 156, 2997: 155}
+        self.assertEqual({e['rank'] for e in d['entries']}, set(stock) | {1798})
+        for e in d['entries']:
+            self.assertEqual(e['donor'], 155)
+            if e['rank'] in stock:
+                self.assertEqual((e['w0'], e['w1']), tt[stock[e['rank']]], e['key'])
+
+    def test_every_recording_preview_is_within_3x_of_the_frame(self):
+        """the recording preview (+0x0C / +0x10, else the base p2061's 1288 x 724) is at most
+        PREVIEW_MAX_DOWN smaller than the recorded raster (+0x00 / +0x04) on each axis (U48K flashed at
+        3.71x down, camera 2026-11-05), and the active preview is the buffer less 8 x 4 like p2061's"""
+        import rcd
+        import fpl_formats as F
+        for p in sorted((self.out / 'RESCUS').iterdir()):
+            d = rcd.decode(p.read_bytes(), self.img, None)
+            rec = dict(d['canvas_rec'])
+            pw, ph = rec.get(0x0C, 1288), rec.get(0x10, 724)
+            self.assertLessEqual(rec[0x00] / pw, F.PREVIEW_MAX_DOWN, p.name)
+            self.assertLessEqual(rec[0x04] / ph, F.PREVIEW_MAX_DOWN, p.name)
+            if p.name in ('U48K.RCD', 'W48K.RCD'):
+                self.assertEqual((rec[0x20], rec[0x28]), (pw - 8, ph - 4), p.name)
+                self.assertAlmostEqual(pw / ph, rec[0x00] / rec[0x04], delta=0.02, msg=p.name)
 
     def test_og4k_resize_is_stock_p2001s(self):
         """canvas +0x60/+0x64/+0xD0/+0xD4: the read -> raster downscale x 1024.  OG4K reads mode 98's

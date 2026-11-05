@@ -658,3 +658,43 @@ The core did not change (6e390ac1): a format is a data file. Card r14
 A001_155 (23.98, 105 frames) and A001_156 (59.94, 102 frames): 4784x1696 8-bit (8,194,048 B a frame),
 DefaultCrop 4768x1680 at (8,8), FrameRate 23.976 / 59.94; clean 2.81:1 pictures edge to edge,
 steady exposure. Clips end by themselves on the slow SD card (~490 MB/s needed at 59.94).
+
+**Letterboxed live view: RAM tests (2026-11-05, OG4K live).** The 3:2 display template (S.TPL0
+{1620, 1080, 0, 0, 1620, 1080, 0, 4, 4177920 = 1632x1280x2, 1, 1}, TPL2 {320, 213, ...}) and OG4K's
+p51 standby rows. (1) template 1620x571 / 320x113 and p51 680 / 672 rows (the 2.81:1 band's share of
+1276): a flickering mosaic in the upper right of live view. (2) p51 680 / 672 alone, template
+unchanged: a similar mosaic. So a row count that is not a stock live-view profile's breaks the LV
+pipeline; the 3:2 view worked because it copies photo mode's complete profile, and no stock profile
+shows a 2.81:1 band. Restored. Next idea: frame guides over the normal 16:9 view.
+**Parked (the user, 2026-11-05): live-view framing for non-16:9, non-3:2 formats (W48K).** No
+letterbox: the LV pipeline breaks with row counts that are not a stock profile's (above). The stock
+Frame Guide (custom aspect W:H, lines only on the fp L) is selectable but draws nothing with any of
+our formats (OG4K, W48K), cause not traced (LV_FrameGuid / the big LV notifier at 0xC059xxxx). A
+possible route left: a stock live-view profile whose picture already is a wide full-width band.
+
+## U48K: full width at 16:9 (static, 2026-11-05)
+The user's choice: mode 155's 4784x2700 2x2-binned read (5400 of 6380 rows; stock UHD 29.97 / 12-bit
+scale it to 3856) recorded 1:1 at 4784x2688 / active 4768x2672, enum 13. Modes 155..158 differ only
+in frame length: donor 155, 23.98 / 24 / 25 / 29.97 at SIGMA's own words (capture_modes), plus 17.98;
+48 and up do not fit the band. Live view: the stock 16:9 view shows this area. 12.9 MB a frame at
+8-bit. Core unchanged (6e390ac1). Card r15 (`cards/20261105-rescustom-u48k-r15`) = r14 + U48K.RCD
+(`85307f8a…`).
+**U48K on the camera (r15, 2026-11-05):** LOAD.LOG `OCD04040400`. A001_159/160 (29.97, 27/29 frames)
+and 161 (23.98, 36): 4784x2688 8-bit (12,939,776 B), clean 16:9 frames, steady exposure; also OG48K at
+29.97 (A001_157/158) and 23.98 (162) record. But during every U48K recording, at both rates, all the
+way through, the screen alternates between live view and a pinkish frame of random patterns (the
+user); OG4K, OG48K and W48K do not. Not bandwidth (OG48K is larger), not the 1:1 downscale words
+(OG48K / W48K share them). Hypothesis: U48K is the only one through the stock 16:9 display path with a
+frame larger than stock UHD's (12.9 MP vs 8.4; W48K 8.1 fits; the 3:2 rows use the core's template
+path) -- a recording-preview buffer sized for UHD. Test planned: U48K's ROW_ASPECT := 2 in RAM.
+RAM test (U48K live): ROW_ASPECT := 2 (the 3:2 display path) -- recording live view stretched AND
+still flashing: not the 16:9 path's buffer. Then: the recording preview (canvas +0x0C/+0x10 buffer,
++0x20/+0x28 active) against the recorded raster -- stock UHD 2.99x / 3.00x, OG4K 2.98x, OG48K 2.96x /
+2.99x, W48K 3.71x / 2.34x, U48K 3.71x / 3.71x (both inherit p2061's 1288x724): U48K is the only one
+beyond 3x down. Card r16 (`cards/20261105-rescustom-preview-r16`): U48K preview 1616x908 / 1608x904
+(2.96x both), W48K 1616x572 / 1608x568 (2.96x / 2.97x, even -- its recording preview was squeezed);
+fpl_formats.PREVIEW_MAX_DOWN = 3 and a test over every format. U48K.RCD `f5c71b44…`, W48K.RCD
+`67803be7…`; core and the 3:2 formats as r15. Also seen: the frame guide shows in U48K's live view.
+**On the camera (r16, 2026-11-05):** U48K records without the flashing (A001_163/164 at 23.98,
+A001_165 at 29.97: 4784x2688, clean, steady). The preview's 3x limit was the cause. The frame guide
+shows (the user).
