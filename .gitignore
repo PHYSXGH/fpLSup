@@ -49,3 +49,11 @@ research/fp2/check_fw*
 
 # 從別台相機(BF)韌體萃取的暫存器表，留在 sigma_bf/
 projects/imx410-lab/offline/bf_imx410_modes.csv
+
+# the actual firmware files
+firmware
+
+# unpacked firmware images (fp = out/, fp L = out_fpl/, dp2 Quattro = out_dp2q/)
+out/
+out_fpl/
+out_dp2q/

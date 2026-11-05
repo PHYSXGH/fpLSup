@@ -46,7 +46,7 @@
 ```
 research/<主題>/   有 —— 相機本身的事實,換個專案還是成立
 projects/<專案>/   沒有 —— 只在那件工作的脈絡裡有意義
-<他牌相機>/        bmcc6k/ bmd_gen1/ sigma_bf/ sony_a7m3/ zcam_e2f6/ —— 別台相機的韌體與反編譯,放最外層
+<他牌相機>/        bmcc6k/ bmd_gen1/ sigma_bf/ sigma_dp2q/ sony_a7m3/ zcam_e2f6/ —— 別台相機的韌體與反編譯,放最外層
 ```
 
 每個分類底下:
@@ -275,6 +275,11 @@ captures/    素材 —— 支持那些結論的證據
 - [`COLOR_ANALYSIS.md`](sigma_bf/COLOR_ANALYSIS.md) — BF 色彩資料對照 fp
 - [`tools/`](sigma_bf/tools/README.md) — 分析腳本
 - 上機結果在 `projects/imx410-lab/notes/IMX410_RULES.md` §69
+
+### `sigma_dp2q/` — 他牌對照:SIGMA dp2 Quattro 2.03(Milbeaut M7、Cortex-A9、T-Kernel)—— 與 fp 不同平台
+
+- [`README.md`](sigma_dp2q/README.md) — 解包(`tools/unpack_dp2q.py` → `out_dp2q/`)
+- [`notes/FIRMWARE_MAP.md`](sigma_dp2q/notes/FIRMWARE_MAP.md) — loader/master 兩份完整韌體、副控 MCU 區塊、T-Kernel 呼叫層、50 個任務表(`tools/task_table.py`)
 
 ### `sony_a7m3/` — 他牌對照:Sony ILCE-7M3(A7 III)4.04 `av-cam.bin`
 
