@@ -538,3 +538,69 @@ Card r9 (`cards/20261104-rescustom-bitdepth-r9`): core `af0fcc41…`, OG4K.RCD `
 4095 / 256 as stock), frame sizes 12,456,960 / 14,932,480 / 9,982,464 B; clean pictures, steady
 exposure. So one virtual id in the 8-bit block serves every depth: the depth goes by the picker's table
 and canvas +0x80/+0x84. 8-bit still records with +0x80 = 9.
+
+## The frame-rate menu greys every stock rate (static, 2026-11-05)
+The user (camera, 2026-11-04): with a RES-Custom format live, the frame-rate list greys every rate but the
+virtual 17.98. Cause: `key_rate_row` (ogc.c) finds which stock rate row an entry serves by parsing the
+end of its key in the fp's format ("23_98", "24" ... "120", nothing after); the fp L's keys end in
+"FPS" (OG4K23_98FPS, OG4K29_97FPS ...), so no entry matched a stock row and `rate_row_ok` greyed all
+nine. The virtual rates go by ENT_VRATE, not the key -- hence 17.98 alone. Fix (OGC_FPL): parse digits,
+an optional "_" and two digits, then "FPS", and map 23.98 / 24 / 25 / 29.97 / 48 / 50 / 59.94 / 100 /
+119.88 to rows 0..8. test_fpl_rescustom compiles the function from ogc.c on the host and checks every
+token and near misses (mutation-checked). fp core unchanged (7b575c72). Card r10
+(`cards/20261105-rescustom-ratemenu-r10`): core `87134ead…`, the .RCDs as r9. Assumes the fp L's
+frame-rate list has the fp's nine rows in that order -- the camera says.
+**On the camera (r10, 2026-11-05):** with OG4K live the frame-rate list offers 23.98, 24, 25, 29.97 and the
+virtual 17.98 (the user); 48 and up stay greyed (mode 98 tops out at 38.4 fps). So the fp L's list has
+the fp's nine rows in the same order.
+Clips at 29.97 (r10): A001_152 and A001_153, OG4K 8-bit, 47 frames each, 3856x2568, FrameRate 29.97;
+clean pictures. The first OG4K takes at a stock rate other than 23.98.
+
+## 3:2 live view: photo mode's heights (camera + static, 2026-11-05)
+The user: with OG4K live, live view (not recording) is the 16:9 picture stretched to 3:2. fnprobe on
+FUN_c04398f0 (r1 = the profile id): video live view builds p51 continuously, photo mode p1. Both read
+3184x1276 binned 3 / 5 / 5 -- the full sensor height -- and differ only in +0x10 / +0x28 / +0xE0:
+p51 1081 / 1071 / 1081 (a 16:9 slice), p1 1276 / 1268 / 0 (every row). ogc_out already shows our rows'
+live view in a 3:2 box, so p51's slice came out stretched. RAM test (p51's three column entries at
+0xC0C6FCA0 / 0xC0C66C34 / 0xC0C5ABA4 := p1's): 3:2, no stretching (the user's idea: use photo mode's live
+view) -- and, being the firmware's table, stock 16:9 distorted; restored. The fix is per format: a
+standby group (applied only while the row is live) `LV32` = p51 <- p1's three heights, in OG4K and
+OG48K. Test against the stock tables. Card r11 (`cards/20261105-rescustom-liveview-r11`): core as r10
+(`87134ead…`), OG4K.RCD `03a921a6…`, OG48K.RCD `c7534e81…`. Only p51 (the uncropped step): the
+magnifier / crop steps p52..60 keep theirs.
+
+**Toolchain (2026-11-05).** The Fedora 45 upgrade replaced clang 22.1.8 with 23.1.4 (cores rebuilt
+differently: fp L 87134ead -> 99c9d4af, fp 7b575c72 -> 1ca0f36f; the C text grew 102 bytes) and Python
+3.14 with 3.15 (the venv broke). Restored without touching the system compiler: Fedora 44's clang
+22.1.8 unpacked to ~/.local/opt/clang22 (wrapper `bin/clang`; put it first on PATH for builds), and
+python3.14 installed by the user, the venv's python3 pointed at /usr/bin/python3.14. With both, the
+cores are byte-identical again (fp 7b575c72, fp L 87134ead).
+
+**Half-press focus stretched the 3:2 live view (camera, 2026-11-05).** pidring.py (a ring of profile
+CHANGES at FUN_c04398f0, with S.FLAG / S.CUR): the half-press switches live view to a focus profile
+and back -- p1551 one time, p1516 another (by setting) -- and builds p1031 (a 3856x2568 still) too.
+Photo mode: live view p1, half-press p1271. Every uncropped video live-view profile (width 1928, no
+raster) has a photo twin with the same read and rate, 280 ids lower (p51 <- p1): p1481/1201,
+1516/1236, 1551/1271, 1586/1306, 1621..1726/1341..1446 (3184 x 424 / 910 / 2126 / 1276 reads, binned
+to the full sensor height); the twin keeps every row, the video one crops to 16:9 (+0x28, and
++0x10/+0xE0/+0xD0/+0x1C/+0x88/+0x8C as the case is). A RAM patch of p1551 alone did nothing (that
+half-press used p1516). Fix: fpl_formats LV32, one standby group per distinct set of the twin's
+differing fields (6 groups, 9 profiles); MAX_SBY_GROUPS 8 on the fp L (4 on the fp: unchanged).
+test_fpl_rescustom derives the table from the image and checks no such profile is left out. Card r12
+(`cards/20261105-rescustom-afview-r12`): core `a6a5ddeb…`, OG4K.RCD `167bc794…`, OG48K.RCD
+`eaf5c20b…`; fp core 7b575c72.
+
+**The live-view label says UHD (camera, 2026-11-05).** callring.py on the label function's second word
+(0xC0437D64; the core's `name` hook owns 0xC0437D60): the only calls that reach the stock code come
+from 0xC043BA74 (the recording key builder) with 3840x2160 while stock UHD is live (FLAG 0); with
+OG4K live none reach it -- the core answers them all with its label. So the on-screen resolution
+label is not this function: the GUI draws it from the resolution setting, which for our rows holds
+the stock value 3 (UHD). The brief "DCI 4K" when first switching to a new row: probably the row's own
+value (OG4K 8) in the setting before the core's setter moves it to 3 -- to be confirmed. Open.
+The user (2026-11-05): the fp L has no DCI 4K resolution setting of its own, so OG4K's 8 / OG48K's 10
+collide with nothing. Label behaviour (the user): any resolution -> OG48K shows "DCI 4K"; OG48K ->
+OG4K stays "DCI 4K"; UHD -> OG4K stays "UHD"; FHD -> OG4K "DCI 4K". Reading: the label refreshes only
+when its 4K class changes, and our values read as "DCI 4K" when it does. Cosmetic; to find where the
+live-view label is drawn.
+**On the camera (r12, 2026-11-05):** half-press focus with OG4K stays 3:2 (the user); stock 16:9
+live view and focus are normal.

@@ -107,6 +107,61 @@ class FplBuildTests(unittest.TestCase):
             d = rcd.decode((self.out / 'RESCUS' / f'{name}.RCD').read_bytes(), self.img, None)
             self.assertEqual(d['bit_depths'], (8, 10, 12), name)
 
+    def test_rate_rows_parse_the_fp_l_keys(self):
+        """key_rate_row (the frame-rate menu's greying): the fp L's keys end in FPS; the fp parser saw none
+        of them and greyed every stock rate but the virtual 17.98 (camera, 2026-11-04).  The function
+        from ogc.c, compiled on the host with OGC_FPL, against every rate token and some near misses."""
+        import shutil
+        if not shutil.which('cc'):
+            self.skipTest('needs a host C compiler')
+        src = (HERE / 'ogc.c').read_text()
+        a = src.index('static u32 key_rate_row(u32 key, u32 lab)')
+        fn = src[a:src.index('\n}\n', a) + 3]
+        keys = ['OG4K23_98FPS', 'OG4K24FPS', 'OG4K25FPS', 'OG4K29_97FPS', 'OG4K48FPS', 'OG4K50FPS',
+                'OG4K59_94FPS', 'OG4K100FPS', 'OG4K119_88FPS',
+                'OG4K23_98', 'OG4K24', 'OG4K24FPSCROP', 'OG4K23_9FPS', 'OG4K30FPS', 'OG48K24FPS', 'UHD24FPS']
+        want = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9]
+        c = ['#include <stdio.h>', '#include <stdint.h>', '#include <string.h>', 'typedef uint32_t u32;',
+             'static unsigned char M[4096];', '#define B8(a) M[(a)]', '#define OGC_FPL 1', fn,
+             'int main(void) {', '  const char *k[] = {' + ', '.join('"%s"' % k for k in keys) + '};',
+             '  strcpy((char *)M + 2048, "OG4K");',
+             '  for (u32 i = 0; i < %d; i++) {' % len(keys),
+             '    memset(M, 0, 32); strncpy((char *)M, k[i], 16);',
+             '    printf("%u\\n", key_rate_row(0, 2048)); }', '  return 0; }']
+        with tempfile.TemporaryDirectory() as t:
+            (pathlib.Path(t) / 'k.c').write_text('\n'.join(c))
+            subprocess.run(['cc', '-O1', '-o', t + '/k', t + '/k.c'], check=True)
+            got = [int(x) for x in subprocess.run([t + '/k'], capture_output=True, text=True).stdout.split()]
+        self.assertEqual(got, want)
+
+    def test_3_2_live_view_uses_photo_modes_profiles(self):
+        """every uncropped video live-view profile (width 1928, no raster) has a photo-mode twin with the
+        same read and rate that keeps every row; while OG4K / OG48K is live each gets its twin's differing
+        fields (camera, 2026-11-05: p51 live view, p1551 / p1516 half-press)"""
+        import rcd
+        import fpl_formats as F
+        sys.path.insert(0, str(ROOT / 'projects' / 'fpl-port' / 'tools'))
+        import canvas_compare as C
+        cols = C.columns(self.img, C.FPL['builder'])
+        mp = lambda p: word(self.img, C.FPL['mapping'] + 4 * p)
+        cv = lambda p: {o: word(self.img, c + 4 * mp(p)) for o, c in cols.items()}
+        read = lambda c: (c[0xF4], c[0xF8], c[0xFC], c[0x100], c[0x104], c[0x30])
+        want = {}
+        for v, t in F.LV_TWINS:
+            cvv, cvt = cv(v), cv(t)
+            self.assertEqual(read(cvv), read(cvt), (v, t))
+            self.assertGreater(cvt[0x28], cvv[0x28], (v, t))              # the twin shows more rows
+            want.setdefault(tuple((o, cvt[o]) for o in sorted(cols) if cvv[o] != cvt[o]), []).append(v)
+        # no uncropped video live-view profile left out (photo ids are the twins)
+        twins = {t for _, t in F.LV_TWINS}
+        lv = [p for p in range(1, 2000) if mp(p) != 0xFFFFFFFF and cv(p)[0x0C] == 1928 and cv(p)[0x00] == 0
+              and p not in twins and any(read(cv(p)) == read(cv(t)) for t in twins)]
+        self.assertEqual(sorted(lv), sorted(v for v, _ in F.LV_TWINS))
+        expect = sorted((sorted(ps), list(pairs), 0) for pairs, ps in want.items())
+        for name in ('OG4K', 'OG48K'):
+            d = rcd.decode((self.out / 'RESCUS' / f'{name}.RCD').read_bytes(), self.img, None)
+            self.assertEqual(sorted((sorted(p), list(q), c) for p, q, c in d['standby']), expect, name)
+
     def test_og4k_resize_is_stock_p2001s(self):
         """canvas +0x60/+0x64/+0xD0/+0xD4: the read -> raster downscale x 1024.  OG4K reads mode 98's
         2x-binned 4784 wide into 3856 -- stock p2001's ratio (4784x2700 -> 3856x2170), not its base

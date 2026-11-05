@@ -363,6 +363,21 @@ static u32 key_rate_row(u32 key, u32 lab)
 {
     u32 i = 0, n = 0, d = 0;
     while (i < 8 && B8(lab + i)) { if (B8(key + i) != B8(lab + i)) return 9; i++; }
+#ifdef OGC_FPL
+    /* the fp L's tokens (ogc_layout RATES): 23_98FPS 24FPS 25FPS 29_97FPS 48FPS 50FPS
+     * 59_94FPS 100FPS 119_88FPS -- digits, "_" and two digits for the broadcast rates, "FPS" */
+    u32 f = 0, fd = 0;
+    for (; i < 16 && B8(key + i) >= '0' && B8(key + i) <= '9'; i++, d++) n = 10 * n + B8(key + i) - '0';
+    if (i < 16 && B8(key + i) == '_')
+        for (i++; i < 16 && B8(key + i) >= '0' && B8(key + i) <= '9'; i++, fd++) f = 10 * f + B8(key + i) - '0';
+    if (!d || d > 3 || (fd && fd != 2) || i + 3 > 16 || B8(key + i) != 'F' || B8(key + i + 1) != 'P'
+        || B8(key + i + 2) != 'S' || (i + 3 < 16 && B8(key + i + 3))) return 9;
+    switch (n * 100 + f) {
+    case 2398: return 0; case 2400: return 1; case 2500: return 2; case 2997: return 3; case 4800: return 4;
+    case 5000: return 5; case 5994: return 6; case 10000: return 7; case 11988: return 8;
+    }
+    return 9;
+#endif
     if (B8(key + i) == '2' && B8(key + i + 1) == '3' && B8(key + i + 2) == '_' && B8(key + i + 3) == '9'
         && B8(key + i + 4) == '8' && B8(key + i + 5) == 0)
         return 0;

@@ -47,6 +47,20 @@ def _f(x):
 #   raster / preview p1004's, the stock 3840x2552 still: raster 3856x2568, active 3840x2552, preview
 #                    1296x861 / 1280x851 -- 9.9 Mpx, no wider than UHD's 3856 (Jose's: 9.8 Mpx)
 #   read             mode 98's binned 4784x3190, scale 2.0, downscaled 1.24x on both axes
+# 3:2 live view (camera, 2026-11-05; the user's idea: use photo mode's live view).  Every uncropped
+# video live-view profile reads the full sensor height and crops it to 16:9; photo mode has a twin
+# with the same read that keeps every row (p51 <- p1; the focus profiles p1481.. <- p1201.., 280 ids
+# lower).  While a 3:2 row is live each video profile gets its twin's differing fields (a standby
+# group; stock 16:9 keeps its own).  Seen on the camera: p51 (live view), p1551 / p1516 (half-press,
+# by setting).  test_fpl_rescustom derives the same table from the image.
+LV_TWINS = [(51, 1), (1481, 1201), (1516, 1236), (1551, 1271), (1586, 1306),
+            (1621, 1341), (1656, 1376), (1691, 1411), (1726, 1446)]
+LV32 = [([51], [(0x10, 1276), (0x28, 1268), (0xE0, 0)], 0),
+        ([1481], [(0x1C, 2), (0x28, 422), (0x88, 4), (0x8C, 4)], 0),
+        ([1516], [(0x1C, 2), (0x28, 906), (0x88, 4), (0x8C, 2)], 0),
+        ([1551], [(0x10, 1290), (0x1C, 2), (0x28, 1280), (0xD0, 1687), (0xE0, 0)], 0),
+        ([1586], [(0x10, 1276), (0x1C, 2), (0x28, 1266), (0xD0, 1706)], 0),
+        ([1621, 1656, 1691, 1726], [(0x1C, 2), (0x28, 1266)], 0)]
 OG4K_RASTER = (3856, 2568)
 OG4K_ACT = (3840, 2552)
 OG4K_BASE = 2061
@@ -76,6 +90,7 @@ ROWS = {
                    (0xF4, REC[0]), (0xF8, REC[1]),
                    (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
         rate_canvas=[],
+        standby=LV32,
         row_text='%s %dx%d' % (LABEL, ACT[0], ACT[1]), summary=LABEL,
         # 10/12-bit: one virtual profile id (the 8-bit CinemaDNG block) for all three; the depth goes
         # by the picker's table (pick8/10/12) into canvas +0x80/+0x84, as stock p2061/p2391/p2721
@@ -123,6 +138,7 @@ ROWS = {
                    (0xF4, OG4K_RASTER[0]), (0xF8, OG4K_RASTER[1]),
                    (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
         rate_canvas=[],
+        standby=LV32,
         row_text='OG4K %dx%d' % OG4K_ACT, summary='OG4K',
         # 10/12-bit: one virtual profile id (the 8-bit CinemaDNG block) for all three; the depth goes
         # by the picker's table (pick8/10/12) into canvas +0x80/+0x84, as stock p2061/p2391/p2721

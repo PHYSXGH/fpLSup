@@ -181,4 +181,5 @@ def setent():
     print(f'set {k!r} at {e:#x}: pid {w[1]} -> {pid}, mode {w[2]} -> {mode}')
 
 
-{'install': install, 'state': state, 'poll': poll, 'remove': remove, 'setent': setent}[sys.argv[1]]()
+if __name__ == '__main__':
+    {'install': install, 'state': state, 'poll': poll, 'remove': remove, 'setent': setent}[sys.argv[1]]()

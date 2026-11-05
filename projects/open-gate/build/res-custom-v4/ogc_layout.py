@@ -170,6 +170,8 @@ VAR = dict(PID=0x00, BASE=0x04, ROW=0x08, LIST=0x0C, SIZE=0x10)   # LIST: S offs
 # A standby group (S body): {npids, npairs, pids..., pairs...}; while a row is live, a
 # canvas whose profile is one of the pids gets the pairs (the old "preview heights" are one)
 MAX_VARS, MAX_SBY_GROUPS, MAX_SBY_PIDS, MAX_SBY_PAIRS = 32, 4, 16, 32
+if FPL:
+    MAX_SBY_GROUPS = 8      # the 3:2 live view: one group per video live-view profile family (fpl_formats LV32)
 PREV_GROUP_PIDS = (5, 210, 227, 257, 258, 259)     # v1 files: prev_h becomes this group
 # the virtual profile ids: empty mapping slots in FUN_c043a1c8's class 0 (41..100), rows first
 VPID_POOL = [74, 75, 76, 77, 78, 79, 47, 48, 49, 50, 52, 54, 55, 56, 57, 58, 59, 60, 62, 64,
