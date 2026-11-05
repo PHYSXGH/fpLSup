@@ -479,6 +479,22 @@ xlook:
 XLOOK lk_x3c, NX_LK_X3C, 3224553052, r4, r5, r6, r7, sl
 XLOOK lk_x5c, NX_LK_X5C, 3224553156, r4, r5, r6, r7
 XLOOK lk_x0c, NX_LK_X0C, 3224553260, r4, r5, r6, r7, sl
+
+/* ---- the cine LV_Resolution publisher (r0 object, r1 value): recorded, then straight on.
+ * Back to 0xC059878C (decimal: an fp L address, not an fp one to map). */
+.global lvpub
+lvpub:
+    push    {r2}
+    LDA     r2, (S + S_LVPUB_OBJ)
+    str     r0, [r2]
+    str     r1, [r2, #4]
+    pop     {r2}
+    PASS    NX_LVPUB
+.global lvpub_replay
+lvpub_replay:
+    push    {r4, r5, r6, lr}
+    LDA     ip, 3227092876
+    bx      ip
 #endif
 
 /* ---- the four `bl FUN_c032c750(mode)` shutter-angle sites (og3kfps) ---------- */

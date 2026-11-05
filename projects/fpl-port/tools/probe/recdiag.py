@@ -15,7 +15,9 @@ ASSERT = 0xC0011100
 ASSERT_W0 = 0xE92D4030                     # push {r4, r5, lr}
 ASSERT_FLAG = 0xC3033465                   # the routine's "already asserting" byte
 PICK8 = 0xC043BAB0
-PICK8_SHIM_OFF, S_FROM_SHIMS = 504, 0x1400
+PICK8_SHIM_OFF = 504
+S_MAGIC = 0x3143474F                     # "OGC1" (ogc_layout MAGIC), S + 0
+S_FROM_SHIMS = (0x1800, 0x1400)          # the core's shim area: 0x1800 from 2026-11-05 (r13), 0x1400 before
 S_OFF = dict(FLAG=0x8, ASPECT=0xC, CUR=0x10, BITLATCH=0x1C, PICKOK=0x20, FPSLATCH=0x24, PBROW=0x28,
              LAST_ENT=0x2C, NROWS=0x30, NENT=0x38, NVM=0x40, HITS=0x50, SEL=0x220, VRATE=0x6E0)
 STATE = __file__.replace('recdiag.py', 'recdiag.json')
@@ -110,7 +112,11 @@ def find_s():
     v = rd(ven, 2)
     if v[0] != 0xE51FF004:
         raise SystemExit(f'veneer {ven:#x} holds {v[0]:#x}, not ldr pc, [pc, #-4]')
-    return v[1] - PICK8_SHIM_OFF + S_FROM_SHIMS, ven
+    shims = v[1] - PICK8_SHIM_OFF
+    for back in S_FROM_SHIMS:                # S starts with the core's magic (ogc_layout MAGIC)
+        if rd(shims + back)[0] == S_MAGIC:
+            return shims + back, ven
+    raise SystemExit(f'no res-custom state after the shims at {shims:#x}')
 
 
 def state(quiet=False):

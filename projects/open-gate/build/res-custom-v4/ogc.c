@@ -713,7 +713,20 @@ u32 ogc_cmt(u8 *S, u32 var)
         u32 row = rowp(S, r);
         if (W(row + ROW_ON) && W(row + ROW_MROW) == mrow) { sel = r + 1; break; }
     }
+#ifdef OGC_FPL
+    u32 was = SW(S, S_SEL);
+#endif
     sel_set(S, sel);
+#ifdef OGC_FPL
+    /* The live-view label follows LV_Resolution, which the firmware posts only when the value
+     * changes; between rows that share one (UHD, OG4K, OG48K: all 3) nothing would be posted.
+     * Post again with the last value through the publisher: the converter now has the new row's
+     * pair first (pairs_build), so the state is the new row's.  0xC0598788 in decimal (fp L). */
+    if (SW(S, S_SEL) != was && SW(S, S_LVPUB_OBJ)) {
+        ((void (*)(u32, u32))3227092872u)(SW(S, S_LVPUB_OBJ), SW(S, S_LVPUB_VAL));
+        SW(S, S_LVPUB_REPOSTS)++;
+    }
+#endif
     return 0;
 }
 
@@ -2325,6 +2338,9 @@ static u32 ui_rows(u8 *S, u32 tpl)
 #define RES_CSV 0xC0F8E7ECu
 #define THUMB_VENEER 0xF000F8DFu
 enum { QS_CLONE = 0, QS_END = 1, QS_MAXR = 2, QS_CURSOR = 3, QS_FOOTER_N8 = 4, QS_FOOTER_LABEL = 5 };
+#ifdef OGC_FPL
+enum { QS_LVCLONE = 6 };      /* build_v3_rescustom.QS_LVCLONE */
+#endif
 
 static u32 le16(u32 a) { return u8at(a) | u8at(a + 1) << 8; }
 static u32 le32(u32 a) { return le16(a) | le16(a + 2) << 16; }
@@ -2444,6 +2460,55 @@ static u32 qs_clone(u8 *S, u32 old, u32 len, u32 out, u32 cap, u32 n, u32 prop, 
     return o;
 }
 
+#ifdef OGC_FPL
+/* The fp L live-view label (fpl_formats LV_CLIPS): a copy of each property's LAST key -- the
+ * stock DCI 4K label, the wide one -- at each times[i], property `prop` (or none: ~0) with ids[i].
+ * Pure: the bytes in, the bytes out (its length, 0 = leave the record). */
+static u32 lv_keys(u32 old, u32 len, u32 out, u32 cap, u32 nr, const u32 *times, const u32 *ids, u32 prop)
+{
+    u32 count, src = 28, o = 28;
+    if (!nr || len < 28 || cap < 28) return 0;
+    copy8(out, old, 28);
+    count = be32(old + 12);
+    for (u32 p = 0; p < count; ++p) {
+        if (src + 20 > len) return 0;
+        u32 keys = be32(old + src);
+        if (keys == 0 || keys > 255u - nr || src + 20 + 10 * keys > len ||
+            o + 20 + 10 * (keys + nr) > cap) return 0;
+        copy8(out + o, old + src, 20 + 10 * keys);
+        put_be32(out + o, keys + nr);
+        o += 20 + 10 * keys;
+        for (u32 k = 0; k < nr; k++) {
+            copy8(out + o, old + src + 20 + 10 * (keys - 1u), 10);
+            put_be32(out + o + 2, times[k]);
+            if (p == prop) put_be32(out + o + 6, ids[k]);
+            o += 10;
+        }
+        src += 20 + 10 * keys;
+    }
+    if (src != len) return 0;
+    put_be32(out + 4, o);
+    return o;
+}
+
+/* every row with a Quick Set state k (2..7, below the menu's n): its time and its large /
+ * medium label image (ROW.LVID); a row without that image is left out */
+static u32 lv_clone(u8 *S, u32 old, u32 len, u32 out, u32 cap, u32 n, u32 pa, u32 which)
+{
+    u32 has = pa != 0;
+    u32 times[6], ids[6], nr = 0;
+    for (u32 k = 2; k < n && k <= 7; k++) {
+        u32 row = qs_row_of_k(S, k);
+        if (!row) continue;
+        u32 id = W(row + ROW_LVID + 4 * (which & 1u));
+        if (has && !id) continue;
+        times[nr] = 100u * k / 3u;
+        ids[nr++] = id;
+    }
+    return lv_keys(old, len, out, cap, nr, times, ids, has ? pa - 1u : 0xFFFFFFFFu);
+}
+#endif
+
 static u32 qs_edit(u32 edits, u32 old, u32 len, u32 out, u32 cap, u32 row)
 {
     u32 cur = 0, o = 0;
@@ -2515,6 +2580,13 @@ static u32 qs_b(u8 *S, u32 tab, u32 r, u32 old, u32 *len, u32 a, u32 cap, u32 n)
         if (!got) return 0;
         *len = got;
         return a;
+#ifdef OGC_FPL
+    case QS_LVCLONE:              /* pa = 1 + the image property (0: none), pb = 0 large / 1 medium */
+        l = lv_clone(S, old, l, a, cap, n, pa, pb);
+        if (!l) return 0;
+        *len = l;
+        return a;
+#endif
     case QS_FOOTER_LABEL: {
         u32 row = qs_row_of_k(S, pa);
         if (!row) return 0;

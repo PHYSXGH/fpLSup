@@ -162,6 +162,137 @@ class FplBuildTests(unittest.TestCase):
             d = rcd.decode((self.out / 'RESCUS' / f'{name}.RCD').read_bytes(), self.img, None)
             self.assertEqual(sorted((sorted(p), list(q), c) for p, q, c in d['standby']), expect, name)
 
+    def test_lvpub_records_and_passes_through(self):
+        """the cine LV_Resolution publisher's hook: r0 / r1 into S.LVPUB_OBJ / VAL, then the stock code
+        from its second word with the same arguments (unicorn; the replay goes back to 0xC059878C)"""
+        try:
+            from unicorn import Uc, UC_ARCH_ARM, UC_MODE_ARM, UC_HOOK_CODE
+            from unicorn import arm_const as A
+        except ImportError:
+            self.skipTest('needs unicorn')
+        facts = self.f
+        L0, SC, S = int(facts['layout0'], 16), int(facts['s_coord'], 16), facts['S']
+        h = next(h for h in facts['hooks'] if h['site'] == '0xC0598788')
+        mu = Uc(UC_ARCH_ARM, UC_MODE_ARM)
+        mu.mem_map(0xC0000000, (len(self.img) + 0xFFFF) & ~0xFFFF)
+        mu.mem_write(0xC0000000, self.img)
+        mu.mem_write(L0, self.core[facts['img_off']: facts['img_off'] + (SC - L0) + 0x1000])
+        mu.mem_map(0x10000000, 0x100000)
+        put = lambda a, *v: mu.mem_write(a, struct.pack(f'<{len(v)}I', *v))
+        put(int(h['next'], 16), int(h['replay'], 16))
+        seen = []
+        mu.hook_add(UC_HOOK_CODE, lambda uc, a, n, d: (seen.append((uc.reg_read(A.UC_ARM_REG_R0),
+                    uc.reg_read(A.UC_ARM_REG_R1))), uc.emu_stop()), begin=0xC059878C, end=0xC059878C)
+        mu.reg_write(A.UC_ARM_REG_SP, 0x10080000)
+        mu.reg_write(A.UC_ARM_REG_R0, 0xC37B7364)
+        mu.reg_write(A.UC_ARM_REG_R1, 3)
+        mu.reg_write(A.UC_ARM_REG_LR, 0x10004000)
+        mu.emu_start(int(h['to'], 16), 0x10004000, count=100)
+        self.assertEqual(seen, [(0xC37B7364, 3)])
+        self.assertEqual(struct.unpack('<2I', mu.mem_read(SC + S['LVPUB_OBJ'], 8)), (0xC37B7364, 3))
+        self.assertEqual(mu.reg_read(A.UC_ARM_REG_SP), 0x10080000 - 16)       # the replayed push only
+
+    # ---- the live-view resolution label (fpl_formats LV_CLIPS / LV_GROUPS) ----
+    @staticmethod
+    def lv_keys_py(old, times, ids, prop):
+        """the reference: every property gets a copy of its LAST key at each time, `prop` the ids"""
+        out = bytearray(old[:28])
+        count, src = struct.unpack('>I', old[12:16])[0], 28
+        for p in range(count):
+            keys = struct.unpack('>I', old[src:src + 4])[0]
+            out += struct.pack('>I', keys + len(times)) + old[src + 4:src + 20 + 10 * keys]
+            last = old[src + 20 + 10 * (keys - 1):src + 30 + 10 * (keys - 1)]
+            for t, i in zip(times, ids):
+                k = bytearray(last)
+                k[2:6] = struct.pack('>I', t)
+                if p == prop:
+                    k[6:10] = struct.pack('>I', i)
+                out += k
+            src += 20 + 10 * keys
+        assert src == len(old)
+        out[4:8] = struct.pack('>I', len(out))
+        return bytes(out)
+
+    def test_lv_label_keys_c_matches_the_reference(self):
+        """ogc.c lv_keys, compiled on the host, on the real live-view records: rows k = 2..7 (all six
+        states), an image clip and a FrameRatePos clip; and the stock record is what the table expects"""
+        import shutil
+        import fpl_formats as F
+        if not shutil.which('cc'):
+            self.skipTest('needs a host C compiler')
+        src = (HERE / 'ogc.c').read_text()
+        fns = []
+        for name in ('static u32 be32(', 'static void put_be32(', 'static void copy8('):   # one-liners
+            a = src.index(name)
+            fns.append(src[a:src.index('\n', a) + 1])
+        a = src.index('static u32 lv_keys(')
+        fns.append(src[a:src.index('\n}\n', a) + 3])
+        times = [100 * k // 3 for k in range(2, 8)]
+        ids = [0x40000010 + k for k in range(6)]
+        cases = [(F.LV_CLIPS[0][0], 0), (F.LV_CLIPS[1][0], 0), (F.LV_CLIPS[4][0], 0xFFFFFFFF)]
+        c = ['#include <stdio.h>', '#include <stdint.h>', 'typedef uint32_t u32; typedef uint8_t u8;',
+             'static unsigned char M[8192];', '#define B8(a) M[(a)]', '#define u8at(a) M[(a)]'] + fns + [
+             'int main(void) {', '  u32 t[6] = {%s}, i[6] = {%s};' % (', '.join(map(str, times)), ', '.join(map(str, ids))),
+             '  int c; u32 n = 0; while ((c = getchar()) != EOF) M[n++] = (u8)c;',
+             '  u32 prop = (u32)M[0] | (u32)M[1] << 8 | (u32)M[2] << 16 | (u32)M[3] << 24;',
+             '  u32 len = lv_keys(4, n - 4, 4096, 2048, 6, t, i, prop);',
+             '  fwrite(M + 4096, 1, len, stdout); return 0; }']
+        with tempfile.TemporaryDirectory() as td:
+            (pathlib.Path(td) / 'k.c').write_text('\n'.join(c))
+            subprocess.run(['cc', '-O1', '-o', td + '/k', td + '/k.c'], check=True)
+            for a, prop in cases:
+                n = struct.unpack('>I', self.img[a - 0xC0000000 + 4:a - 0xC0000000 + 8])[0]
+                old = self.img[a - 0xC0000000:a - 0xC0000000 + n]
+                got = subprocess.run([td + '/k'], input=struct.pack('<I', prop) + old, capture_output=True).stdout
+                want = self.lv_keys_py(old, times, ids, prop)
+                self.assertEqual(got, want, hex(a))
+                self.assertLessEqual(len(got), 1024, 'QS_CAP')
+                # the copies are of the wide key: a width property's new keys say 138 / 113
+                if prop == 0:
+                    w = struct.unpack('>f', want[28 + 20 + 30 + 60 + 20 + 20 + 6:28 + 20 + 30 + 60 + 20 + 20 + 10])[0]
+                    self.assertIn(w, (138.0, 113.0))
+
+    def test_lv_label_records_are_in_the_core_table(self):
+        """the 12 live-view rows (6 clips QS_LVCLONE, 6 groups QS_END), with the stock records' length
+        and hash, in the table the core binary-searches (sorted by address)"""
+        import fpl_formats as F
+        import build_v3_rescustom as B3
+        sys.path.insert(0, str(ROOT / 'fpSup' / 'uishare'))
+        from ui import fpui
+        tab = self.core[self.f['qstab_off']:]
+        ver, n, rows_off = struct.unpack_from('<3I', tab)
+        rows = [struct.unpack_from('<IIHBBHH', tab, rows_off + 16 * i) for i in range(n)]
+        self.assertEqual([r[0] for r in rows], sorted(r[0] for r in rows))
+        by = {r[0]: r for r in rows}
+        for a, kind in F.LV_CLIPS:
+            r = by[a]
+            ln = struct.unpack('>I', self.img[a - 0xC0000000 + 4:a - 0xC0000000 + 8])[0]
+            self.assertEqual(r[1:], (fpui.fnv(self.img[a - 0xC0000000:a - 0xC0000000 + ln]), ln, B3.QS_LVCLONE,
+                                     0 if kind is None else 1, 0xFF if kind is None else kind, 0), hex(a))
+        for a in F.LV_GROUPS:
+            self.assertEqual(by[a][3], 1, hex(a))                                   # QS_END
+            self.assertEqual(struct.unpack('>I', self.img[a - 0xC0000000 + 36:a - 0xC0000000 + 40])[0], 66)
+
+    def test_lv_label_images_ride_in_each_format(self):
+        """each format's pack: <label>_LVL 138x43 and <label>_LVM 113x35 (the stock DCI 4K label's
+        size, whose key the rows copy), named in its UI block for ROW.LVID"""
+        import rcd
+        sys.path.insert(0, str(HERE.parent))
+        import xci
+        for name in ('OG4K', 'OG48K'):
+            data = (self.out / 'RESCUS' / f'{name}.RCD').read_bytes()
+            d = rcd.decode(data, self.img, None)
+            off, ln = d['pack']
+            pack = data[off:off + ln]
+            dims, at = [], pack.find(xci.MAGIC)
+            while at >= 0:
+                dims.append(xci.decode(pack, at)[:2])
+                at = pack.find(xci.MAGIC, at + 4)
+            self.assertIn((138, 43), dims, name)
+            self.assertIn((113, 35), dims, name)
+            for suffix in ('LVL', 'LVM'):
+                self.assertIn(f'{name}_{suffix}'.encode() + b'\0', pack, name)
+
     def test_og4k_resize_is_stock_p2001s(self):
         """canvas +0x60/+0x64/+0xD0/+0xD4: the read -> raster downscale x 1024.  OG4K reads mode 98's
         2x-binned 4784 wide into 3856 -- stock p2001's ratio (4784x2700 -> 3856x2170), not its base

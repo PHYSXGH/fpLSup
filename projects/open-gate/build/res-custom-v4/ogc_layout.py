@@ -26,7 +26,7 @@ LAYOUT0 = 0xC0730000          # the coordinate origin (og_pic.inc OG_CAVE0) -- n
 # Diagnostic build (env OGC_HOOKCNT=1): every hook site enters through a counting
 # stub (hookcnt[i] += 1) appended to the shims; the shims' window grows to hold them.
 HOOKCNT = os.environ.get('OGC_HOOKCNT') == '1'
-SHIMS_MAX = 0x2400 if HOOKCNT else 0x1400
+SHIMS_MAX = 0x2400 if HOOKCNT else (0x1800 if FPL else 0x1400)   # fp L: room for its own hooks (2026-11-05)
 HOOKCNT_BACK = 0x100          # the counters: the shims' window's last 64 words (zero in the image)
 CAP_BACK = 0x400              # with HOOKCNT: the last virtual-profile record, before/after ogc_canvas
 RESERVED_BACK = CAP_BACK if HOOKCNT else 0   # the shims' code stays below this
@@ -121,7 +121,7 @@ S = dict(
     BIT_EN_ON=0x75C,     # the corresponding original Enabled/Enabled2 values
     LV_RECORDS=0x774,   # resident LV text record substitutions (16 bounded entries), or 0
     LV_MIN=0x778, LV_MAX=0x77C,  # quick rejection outside the LV resource interval
-    # (0x780..0x7CF: free -- the former K-row EN arrays)
+    # (0x780..0x7CF: free -- the former K-row EN arrays; the fp L uses 0x780..0x78B below)
     VTV_CALLS=0x7D0,     # the shutter-range / angle sites asked
     VTV_HITS=0x7D4,      # ... and got the virtual rate's answer
     VR_EN_AT=0x800,      # 6 CSV copies x 13 rows (9 stock + K): where each row's "a,b" is (absolute)
@@ -130,6 +130,10 @@ S = dict(
     LV_LABEL=0xA80,      # 14 integer + 14 fractional labels, then literal FPS
     BODY=0xB00,          # rows, entries, lists, overrides, vms follow (filled at entry)
 )
+if FPL:
+    # the live-view resolution label's refresh: the cine LV_Resolution publisher's object and the last
+    # value it posted (lvpub hook), and how often ogc_cmt posted again for a same-value row change
+    S = dict(S, LVPUB_OBJ=0x780, LVPUB_VAL=0x784, LVPUB_REPOSTS=0x788)
 S_WORDS_INIT = {'FMTLATCH': 0xFFFFFFFF, 'PICKOK': 1}
 
 # ---- a row (one format) -------------------------------------------------------
@@ -147,6 +151,10 @@ ROW = dict(ENUM=0x00, PID=0x04, ASPECT=0x08, ON=0x0C, AW=0x10, AH=0x14,
            MAXRATE=0x6C,     # the fastest frame rate (the firmware's rate enum), 0 = no limit of ours
            BITMASK=0x70,    # RCD's declared 8/10/12-bit mask; 0 = legacy/native policy
            SIZE=0x74)
+if FPL:
+    # the live-view resolution label (fpl_formats LV_RECORDS): two string ids, the row's large and
+    # medium label images (uia_apply STRBASE, like QSID)
+    ROW = dict(ROW, LVID=0x74, SIZE=0x7C)
 # §12/§14: the BIN settings area, file (and block) +32, CFG_BYTES long.  The
 # record names formats by LABEL, never by row or value.  Version 1:
 CFG = dict(MAGIC=0x00, VERSION=0x04, FLAGS=0x08, SEL=0x0C,   # SEL: 8-byte label, 0 = stock
@@ -350,7 +358,12 @@ if FPL:
     # the donor's id instead (r0 obj, r1 id -> index).  fp L addresses: the fp has no such tables.
     XLOOKS = [('lk_x3c', 0xC032C658, 'b'), ('lk_x5c', 0xC032C6C0, 'b'), ('lk_x0c', 0xC032C728, 'b')]
     HOOKS += XLOOKS
-    NATIVE_SITES = {n for n, _, _ in PICKS + XLOOKS}
+    # The live-view label: the cine LV_Resolution publisher (r0 its object, r1 the resolution value;
+    # RESCUSTOM_PORT.md "live-view label"), recorded so ogc_cmt can post again when the row changes
+    # but the value does not.  fp L address (the fp's is 0xC059C640, not in the table).
+    LVPUB = [('lvpub', 0xC0598788, 'b')]
+    HOOKS += LVPUB
+    NATIVE_SITES = {n for n, _, _ in PICKS + XLOOKS + LVPUB}
 RFLAG_CLAMP, RFLAG_MAG8, RFLAG_CROP = 1, 2, 4
 # the virtual frame rates, core-defined (rcd entries only say which ones they time):
 # rank (fps x 100), the stock internal it rides on, that rate's export (summary)
@@ -550,7 +563,7 @@ def standby_groups(row):
 
 # the words of a filled S that the entry writes from run-time facts (addresses,
 # what uia_apply handed out); a reference comparison masks them
-RUNTIME_ROW = ('ON', 'MROW', 'QSID', 'PACK', 'PACKLEN', 'PACKCTX', 'PACKST', 'UIRES')
+RUNTIME_ROW = ('ON', 'MROW', 'QSID', 'PACK', 'PACKLEN', 'PACKCTX', 'PACKST', 'UIRES') + (('LVID',) if FPL else ())
 
 
 def state_blob(rows):

@@ -166,6 +166,62 @@ def check(image, target):
         raise ValueError(f'{target}: p{pid} classifier flag {flagged}, expected {bool(row.get("video_base"))}')
 
 
+# ---- the live-view resolution label (camera 2026-11-05; RESCUSTOM_PORT.md "live-view label") ----
+# LV_Resolution (the row's QS state k) drives group "Resolution" in four live-view sets: a clip whose
+# image key at time 0 / 33 / 66 is L_ or M_resolution_1 / _2 / _dci4K, then two width properties
+# (93 / 138 L, 78 / 113 M), the group ending at 66.  For every row k the core appends a key at
+# t_k = 100k/3 to each property -- a copy of the LAST key (the wide one) with the row's image -- and
+# moves the end (ogc.c QS_LVCLONE / QS_END).  The STILLlike sets also move the frame-rate text by
+# the label's width (FrameRatePos): those keys copy the last one as well.  fp L addresses.
+LV_CLIPS = [(0xC1E58194, 0), (0xC1EA8613, 1), (0xC1FC5D08, 0), (0xC20196F5, 1),   # (record, L 0 / M 1)
+            (0xC1FB3D93, None), (0xC200796F, None)]                               # FrameRatePos: no image
+LV_GROUPS = [0xC1E58232, 0xC1EA86B1, 0xC1FC5DA6, 0xC2019793, 0xC1FB3E18, 0xC20079F4]
+# the tiles: the size of the stock DCI 4K label (the key every row's copies), white letters, opaque
+# black ring, ARGB4444, left-aligned like the stock ones; Nimbus Sans Narrow at a medium weight comes
+# closest to the stock face (measured: letters 37 / 30 px, ring 2 px)
+LV_TILE = {'LVL': (138, 43, 37, 0.5), 'LVM': (113, 35, 30, 0.4)}
+LV_RING = 2
+LV_FONT = '/usr/share/fonts/urw-base35/NimbusSansNarrow-Regular.otf'
+
+
+def lv_tile(text, width, height, cap, embolden, ring=LV_RING, font=None):
+    """(luminance, alpha) bytes of an ARGB4444 tile (build_og3k_ui_candidate._hud_tile's format):
+    alpha from the coverage grown by `ring`, grey from the coverage; the text shrinks to fit"""
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+    import os
+    font = font or os.environ.get('FPSUP_FONT_LV', LV_FONT)
+    ss = 8
+    for size in range(120, 8, -1):
+        f = ImageFont.truetype(font, size * ss)
+        big = Image.new('L', (width * 2 * ss, height * 2 * ss), 0)
+        ImageDraw.Draw(big).text((0, height * ss), text, font=f, fill=255, anchor='lm',
+                                 stroke_width=int(round(embolden * ss)), stroke_fill=255)
+        arr = np.array(big)
+        ys, xs = np.where(arr > 30)
+        if len(xs) and (ys.max() - ys.min() + 1) / ss <= cap and (xs.max() - xs.min() + 1) / ss <= width - 2 * ring:
+            break
+    else:
+        raise ValueError(f'{text!r} does not fit {width}x{height}')
+    cover = np.array(big.resize((width * 2, height * 2), Image.LANCZOS))
+    ys, xs = np.where(cover > 10)
+    top = (height - (ys.max() - ys.min() + 1)) // 2
+    cover = np.roll(cover[ys.min() - top: ys.min() - top + height, :], ring - xs.min(), 1)[:, :width]
+    c16 = cover.astype(np.uint16)
+    grown = c16.copy()
+    for dy in range(-ring, ring + 1):
+        for dx in range(-ring, ring + 1):
+            if dx * dx + dy * dy <= ring * ring + 1:
+                grown = np.maximum(grown, np.roll(np.roll(c16, dy, 0), dx, 1))
+    argb = (((grown >> 4) & 0xF) << 12) | (((c16 >> 4) & 0xF) * 0x111)
+    return (argb & 0xFF).astype(np.uint8), (argb >> 8).astype(np.uint8)
+
+
+def lv_tiles(label):
+    """[(name, w, h, luminance, alpha)]: the row's live-view label, large and medium"""
+    return [(f'{label}_{k}', w, h) + lv_tile(label, w, h, cap, emb) for k, (w, h, cap, emb) in LV_TILE.items()]
+
+
 def row_data(target, tmp, image):
     """ogc_rowdata's dict for an fp L format, with its menu pack"""
     import build_og3k_ui_candidate as UI
@@ -175,7 +231,8 @@ def row_data(target, tmp, image):
     try:
         UI.PLAN_TARGET = {'label': row['label'], 'act': tuple(row['act'])}
         pack, _ = UI.assets(tmp, names={'OG3K_QS': row['label'] + '_QS', 'OG3K_SET': row['label'] + '_SET',
-                                        'OG3K_FONT': row['label'] + '_FONT'})
+                                        'OG3K_FONT': row['label'] + '_FONT'},
+                            extra=lv_tiles(row['label']))
     finally:
         UI.PLAN_TARGET = old
     row['pack'] = pack

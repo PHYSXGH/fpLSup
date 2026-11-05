@@ -604,3 +604,40 @@ when its 4K class changes, and our values read as "DCI 4K" when it does. Cosmeti
 live-view label is drawn.
 **On the camera (r12, 2026-11-05):** half-press focus with OG4K stays 3:2 (the user); stock 16:9
 live view and focus are normal.
+
+## The live-view resolution label (static + emulated, 2026-11-05)
+The user: OG48K's live-view label always says "DCI 4K", OG4K's keeps the previous one. Why (fnprobe on
+the cine publisher FUN_c0598788 and the converter FUN_c06bb4d8; research of the resources): the label
+is the `LV_Resolution` state = the resolution converter's answer, whose table the core rebuilds
+(S.PAIRS {value, menu row}, the chosen row's pair first) -- so the state is the row's menu row k (OG48K
+2, OG4K 3). Four live-view sets drive group "Resolution" with it (fp L, = fp + 0xFD40):
+clips 0xC1E58194 / 0xC1EA8613 / 0xC1FC5D08 / 0xC20196F5 (image key at 0 / 33 / 66 = L_ or
+M_resolution_1 / _2 / _dci4K, then two widths 93 / 138 L, 78 / 113 M), groups 0xC1E58232 /
+0xC1EA86B1 / 0xC1FC5DA6 / 0xC2019793 ending at 66. k = 2 lands on the stock DCI 4K key; k = 3 is past
+the end: nothing drawn. The STILLlike sets move the frame-rate text by the label's width
+(FrameRatePos clips 0xC1FB3D93 / 0xC200796F, groups 0xC1FB3E18 / 0xC20079F4). And the firmware posts
+LV_Resolution only when the value changes -- UHD, OG4K, OG48K all hold 3.
+
+The fix, for any number of formats (the user):
+- Images: each row's pack gets `<label>_LVL` 138x43 and `<label>_LVM` 113x35 -- the format's name in
+  the stock label style (decoded: ARGB4444, white letters, opaque black 2 px ring, left-aligned),
+  drawn at build time (fpl_formats.lv_tile; Nimbus Sans Narrow at a medium weight, letters 37 / 30
+  px); their string ids land in ROW.LVID (fp L rows +0x74, ROW size 0x7C) through two more STRBASE.
+- Records: 12 fp L rows in the core's QS table (build_v3_rescustom.lv_rows): the six clips under a
+  new rule QS_LVCLONE = 6 (ogc.c lv_clone / lv_keys: every property gets, per row k, a copy of its
+  LAST key -- the wide one -- at t_k = 100k/3, the image property the row's id), the six groups
+  QS_END (end = t_(n-1)).
+- Refresh: hook `lvpub` on the cine publisher 0xC0598788 records its object and value (S.LVPUB_OBJ
+  0x780 / VAL 0x784); ogc_cmt posts again through it when the chosen row changes (S.LVPUB_REPOSTS
+  0x788 counts).
+- The fp L core's shim area is now 0x1800 (was 0x1400, full); recdiag.find_s tries both.
+Tests: lv_keys compiled on the host against a Python reference on the real records (mutation:
+copying the first key fails it); the 12 rows sorted into the table with the stock length / hash;
+each format's pack carries both tiles; the lvpub shim in unicorn. fp core unchanged (7b575c72).
+Card r13 (`cards/20261105-rescustom-lvlabel-r13`): core `6e390ac1…`, OG4K.RCD `2f49789b…`,
+OG48K.RCD `34699486…`. Unknown until the camera: whether the live-view sets are parsed through the
+record hook after it is armed (on the fp the frame-rate label needed a Quick Set round trip), and
+whether calling the publisher from the commit is safe.
+**On the camera (r13, 2026-11-05):** the live-view label shows OG4K and OG48K by name after every
+switch (FHD -> OG4K -> OG48K -> UHD -> OG4K), no Quick Set round trip needed; FHD and UHD as stock
+(the user).

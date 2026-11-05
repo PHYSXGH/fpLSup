@@ -425,6 +425,9 @@ def ui_template(virtual=False):
     blk.op(fpui.OP_DONE)
     for i, suffix in enumerate(('QS', 'SET', 'FONT')):
         blk.op(fpui.OP_STRBASE, blk.string('@L_' + suffix, fpui.NOT_STOCK), L.ROW['QSID'] + 4 * i)
+    if L.FPL:                       # the live-view label images (fpl_formats lv_tiles)
+        for i, suffix in enumerate(('LVL', 'LVM')):
+            blk.op(fpui.OP_STRBASE, blk.string('@L_' + suffix, fpui.NOT_STOCK), L.ROW['LVID'] + 4 * i)
     data = blk.encode()
     strings, ops, _ = fpui.decode(data)
     for text, at in strings:

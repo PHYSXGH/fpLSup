@@ -400,11 +400,13 @@ def _hud_tile(text, width, height, cap=28, ink=81, ring=3,
     return (argb & 0xFF).astype(_np.uint8), (argb >> 8).astype(_np.uint8)
 
 
-def assets(out: Path, names: dict | None = None) -> tuple[bytes, list[dict]]:
+def assets(out: Path, names: dict | None = None, extra: list | None = None) -> tuple[bytes, list[dict]]:
     """Create three OG3K assets; retain the already-reviewed 86x49 QS tile.
 
     names: rename the three QS resources (uishare QS_SHARE.md §9.4: the Loader v3
-    sup gives them its file-name prefix, "30OG3K_QS"); None keeps OG3K_*."""
+    sup gives them its file-name prefix, "30OG3K_QS"); None keeps OG3K_*.
+    extra: more tiles, already drawn: [(name, width, height, luminance, alpha)]
+    (res-custom fpl_formats.lv_tiles: the fp L live-view label)."""
     asset_dir = out / "assets"
     asset_dir.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -439,8 +441,13 @@ def assets(out: Path, names: dict | None = None) -> tuple[bytes, list[dict]]:
         definitions.append((resname, 88, 38, 28, None, str(value),
                             _font("helvetica")))
 
+    drawn = {d[0]: (d[3], d[4]) for d in (extra or [])}
+    definitions += [(d[0], d[1], d[2], 0, None, None, None) for d in (extra or [])]
     for name, width, height, cap, source, text, font in definitions:
-        if source is None:
+        if name in drawn:
+            luminance, alpha = drawn[name]
+            blob = encode_xci(luminance, alpha)
+        elif source is None:
             if font:
                 luminance, alpha = _hud_tile(text, width, height, font=font)
             else:

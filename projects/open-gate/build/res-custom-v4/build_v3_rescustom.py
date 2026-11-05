@@ -239,10 +239,49 @@ def compile_core(tmp, tab_off, probe=False, v4=False):
     return text
 
 
+QS_LVCLONE = 6     # ogc.c: the fp L live-view label (append a copy of the LAST key per row)
+
+
 def qs_table():
     sys.path.insert(0, str(UISHARE))
     from ui import qs
-    return qs.encode()
+    tab = qs.encode()
+    if not L.FPL:
+        return tab
+    return add_lv_rows(tab, lv_rows(img()))
+
+
+def lv_rows(image):
+    """The fp L live-view label's records (fpl_formats LV_CLIPS / LV_GROUPS) as table rows
+    {address, fnv, length, rule, a, b, edits}: a clip a = 1 + the image property (0: none), b =
+    the row's image (0 large, 1 medium; 0xFF none); a group, the QS_END rule."""
+    import fpl_formats as F
+    sys.path.insert(0, str(UISHARE))
+    from ui import fpui
+    rows = []
+    for a, kind in F.LV_CLIPS:
+        n = struct.unpack('>I', image[a - 0xC0000000 + 4:a - 0xC0000000 + 8])[0]
+        rows.append((a, fpui.fnv(image[a - 0xC0000000:a - 0xC0000000 + n]), n, QS_LVCLONE,
+                     0 if kind is None else 1, 0xFF if kind is None else kind, 0))
+    for a in F.LV_GROUPS:
+        n = struct.unpack('>I', image[a - 0xC0000000 + 4:a - 0xC0000000 + 8])[0]
+        rows.append((a, fpui.fnv(image[a - 0xC0000000:a - 0xC0000000 + n]), n, 1, 0, 0, 0))
+    return rows
+
+
+def add_lv_rows(tab, extra):
+    """qs.encode()'s table with more rows, still sorted by address (ogc.c qs_find)"""
+    ver, n, rows_off, edits_off, fn_off, nmax, kmax, z = struct.unpack_from('<8I', tab)
+    rows = [struct.unpack_from('<IIHBBHH', tab, rows_off + 16 * i) for i in range(n)]
+    have = {r[0] for r in rows}
+    if any(r[0] in have for r in extra):
+        raise BuildError('a live-view record is already a Quick Set record')
+    rows = sorted(rows + list(extra))
+    grow = 16 * len(extra)
+    edits = tab[edits_off:fn_off]
+    head = struct.pack('<8I', ver, len(rows), rows_off, edits_off + grow, fn_off + grow, nmax, kmax, z)
+    body = b''.join(struct.pack('<IIHBBHH', *r) for r in rows)
+    return head + tab[32:rows_off] + body + edits + tab[fn_off:]
 
 
 def build_rcd(formats, tmp):
