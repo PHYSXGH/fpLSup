@@ -146,6 +146,40 @@ ROWS = {
     ),
 }
 
+# W48K (the user, 2026-11-05): the full-width band the stock FHD high rates read -- IMX455 mode 188,
+# 4784x1700 2x2 binned (3400 of the sensor's 6380 rows), 2.81:1 -- recorded 1:1 like OG48K.  Modes
+# 188..195 differ only in frame length (hmax 580 throughout), so mode 188 (59.94) is the one donor
+# and the core's solver gives every rate (23.98 .. 59.94) the stock timing.  A video mode: no clamp.
+# 8.1 MB a frame at 8-bit (59.94: ~490 MB/s).  Live view: 16:9 for now (aspect 3; the core has no
+# letterboxed live view yet), so it shows more height than is recorded.
+W48K_RASTER = (4784, 1696)
+W48K_ACT = (4768, 1680)
+W48K_READ = (4784, 1700)
+ROWS['w48k'] = dict(
+    label='W48K', profile=OG4K_BASE, enum=12,                   # uishare ui/enums.py 'W48K'
+    stock_value=3, aspect=3, flags=0, video_base=True,
+    donor_timing=(188, 0x049C0244, 0x000E0816),                 # hmax 580 | tail 1180, vmax 2070 | x 14
+    # each stock rate at SIGMA's own split of the frame (the solver's gives the same period, but more
+    # lines and a shorter tail at 23.98 / 25 / 50 / 59.94): the timing words of modes 188..195
+    capture_modes={2398: 195, 2400: 194, 2500: 193, 2997: 192, 4800: 190, 5000: 189, 5994: 188},
+    rec=list(W48K_RASTER), act=list(W48K_ACT), prev_h=0,
+    modes=[(188, 5994, 580, 0, 14)],
+    canvas_rec=[(0x00, W48K_RASTER[0]), (0x04, W48K_RASTER[1]),
+                (0x24, W48K_ACT[0]), (0x2C, W48K_ACT[1]),
+                (0xDC, W48K_RASTER[0]), (0xE4, W48K_RASTER[1]),
+                (0xF4, W48K_READ[0]), (0xF8, W48K_READ[1]),
+                (0xFC, SCALE_2), (0x100, SCALE_2), (0x104, SCALE_2),
+                (0x60, OG48K_RESIZE), (0x64, OG48K_RESIZE), (0xD0, OG48K_RESIZE), (0xD4, OG48K_RESIZE)],
+    canvas_pb=[(0x0C, W48K_RASTER[0]), (0x10, W48K_RASTER[1]), (0x1C, 1),
+               (0x20, W48K_ACT[0]), (0x28, W48K_ACT[1]),
+               (0xD8, W48K_RASTER[0]), (0xE0, W48K_RASTER[1]),
+               (0xF4, W48K_RASTER[0]), (0xF8, W48K_RASTER[1]),
+               (0x60, 1024), (0xD0, 1024), (0x64, 1024), (0xD4, 1024)],
+    rate_canvas=[],
+    row_text='W48K %dx%d' % W48K_ACT, summary='W48K',
+    bit_depths=(8, 10, 12),
+)
+
 
 def check(image, target):
     """the static facts this file rests on, against the fp L image"""
@@ -222,11 +256,29 @@ def lv_tiles(label):
     return [(f'{label}_{k}', w, h) + lv_tile(label, w, h, cap, emb) for k, (w, h, cap, emb) in LV_TILE.items()]
 
 
+def stock_timing(image, modes):
+    """capture_timing rows {rank, crop 0, w0, w1, engine fps (f32), nominal} from the firmware's
+    timing table (0xC0B90FF8): each rate at stock mode `modes[rank]`'s own words"""
+    tt = {}
+    for i in range(85):
+        mid, w0, w1 = struct.unpack_from('<3I', image, 0xC0B90FF8 + 0x20 * i - 0xC0000000)
+        tt[mid] = (w0, w1)
+    rates = {r[7]: r for r in L.RATES}
+    out = []
+    for rank, mid in sorted(modes.items()):
+        w0, w1 = tt[mid]
+        eng, nominal = rates[rank][5], rates[rank][6]
+        out.append((rank, 0, w0, w1, _f(eng), nominal))
+    return out
+
+
 def row_data(target, tmp, image):
     """ogc_rowdata's dict for an fp L format, with its menu pack"""
     import build_og3k_ui_candidate as UI
     check(image, target)
-    row = {k: v for k, v in ROWS[target].items() if k not in ('video_base', 'donor_timing')}
+    row = {k: v for k, v in ROWS[target].items() if k not in ('video_base', 'donor_timing', 'capture_modes')}
+    if ROWS[target].get('capture_modes'):
+        row['capture_timing'] = stock_timing(image, ROWS[target]['capture_modes'])
     old = UI.PLAN_TARGET
     try:
         UI.PLAN_TARGET = {'label': row['label'], 'act': tuple(row['act'])}

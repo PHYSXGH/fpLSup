@@ -76,8 +76,8 @@ class FplBuildTests(unittest.TestCase):
 
     def test_the_formats_ship(self):
         """OG4K and OG48K; not UHDX (stock UHD under a new name would take every UHD-sized key, ogc_name)"""
-        self.assertEqual(self.f['formats'], ['og4k', 'og48k'])
-        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['OG48K.RCD', 'OG4K.RCD'])
+        self.assertEqual(self.f['formats'], ['og4k', 'og48k', 'w48k'])
+        self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()), ['OG48K.RCD', 'OG4K.RCD', 'W48K.RCD'])
 
     def test_og4k_rides_on_mode_98(self):
         import rcd
@@ -292,6 +292,27 @@ class FplBuildTests(unittest.TestCase):
             self.assertIn((113, 35), dims, name)
             for suffix in ('LVL', 'LVM'):
                 self.assertIn(f'{name}_{suffix}'.encode() + b'\0', pack, name)
+
+    def test_w48k_is_mode_188s_band_at_the_stock_timings(self):
+        """W48K: the 4784x1700 band (mode 188) recorded 1:1 at 4784x1696 / 4768x1680; every stock
+        rate has the timing words of SIGMA's own mode for it (188..195), 17.98 the solver's"""
+        import rcd
+        d = rcd.decode((self.out / 'RESCUS' / 'W48K.RCD').read_bytes(), self.img, None)
+        self.assertEqual((d['profile'], d['act'], d['aspect'], d['flags'], d['bit_depths']),
+                         (2061, (4768, 1680), 3, 0, (8, 10, 12)))
+        rec = dict(d['canvas_rec'])
+        self.assertEqual((rec[0x00], rec[0x04], rec[0xF4], rec[0xF8], rec[0xFC], rec[0x60]),
+                         (4784, 1696, 4784, 1700, 0x40000000, 1023))
+        tt = {}
+        for i in range(85):
+            w = struct.unpack_from('<3I', self.img, 0xC0B90FF8 + 0x20 * i - 0xC0000000)
+            tt[w[0]] = w[1:]
+        stock = {2398: 195, 2400: 194, 2500: 193, 2997: 192, 4800: 190, 5000: 189, 5994: 188}
+        self.assertEqual({e['rank'] for e in d['entries']}, set(stock) | {1798})
+        for e in d['entries']:
+            self.assertEqual(e['donor'], 188)
+            if e['rank'] in stock:
+                self.assertEqual((e['w0'], e['w1']), tt[stock[e['rank']]], e['key'])
 
     def test_og4k_resize_is_stock_p2001s(self):
         """canvas +0x60/+0x64/+0xD0/+0xD4: the read -> raster downscale x 1024.  OG4K reads mode 98's

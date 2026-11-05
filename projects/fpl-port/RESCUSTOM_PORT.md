@@ -641,3 +641,20 @@ whether calling the publisher from the commit is safe.
 **On the camera (r13, 2026-11-05):** the live-view label shows OG4K and OG48K by name after every
 switch (FHD -> OG4K -> OG48K -> UHD -> OG4K), no Quick Set round trip needed; FHD and UHD as stock
 (the user).
+
+## W48K: the full-width band (static, 2026-11-05)
+The user's choice: IMX455 mode 188's 4784x1700 2x2-binned read (the stock FHD high rates' band,
+3400 of 6380 rows, 2.81:1), recorded 1:1 at 4784x1696 / active 4768x1680, named W48K (enum 12).
+Modes 188..195 differ only in frame length (hmax 580), so one donor (188) and one virtual mode serve
+23.98 / 24 / 25 / 29.97 / 48 / 50 / 59.94 and the virtual 17.98 -- one menu row. The solver gave
+the stock frame periods but its own split at 23.98 / 25 / 50 / 59.94 (more lines, tails down to 340);
+`capture_modes` takes each stock rate's words from SIGMA's own mode instead (fpl_formats.stock_timing
+-> the capture-timing section). A video mode: no clamp. Base p2061, 8-bit pool, 8/10/12-bit, the
+live-view label "W48K" (generated). Live view: aspect 3 (16:9) for now -- the core has no letterboxed
+live view, so it shows more height than is recorded. 8.1 MB a frame at 8-bit (59.94: ~490 MB/s).
+The core did not change (6e390ac1): a format is a data file. Card r14
+(`cards/20261105-rescustom-w48k-r14`) = r13 + W48K.RCD (`2281124b…`).
+**W48K on the camera (r14, 2026-11-05):** LOAD.LOG `OCD03030300` (3 files, 3 accepted, 3 rows).
+A001_155 (23.98, 105 frames) and A001_156 (59.94, 102 frames): 4784x1696 8-bit (8,194,048 B a frame),
+DefaultCrop 4768x1680 at (8,8), FrameRate 23.976 / 59.94; clean 2.81:1 pictures edge to edge,
+steady exposure. Clips end by themselves on the slow SD card (~490 MB/s needed at 59.94).
