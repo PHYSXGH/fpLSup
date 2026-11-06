@@ -108,3 +108,12 @@ python3 -I $T/tools/compare_images.py funcs_master.tsv funcs_loader.tsv [--list]
 
 Matches by name, masked bytes, then instruction sequence with immediates removed. Findings in
 [`notes/FIRMWARE_MAP.md`](notes/FIRMWARE_MAP.md) §2.
+
+### Decompiling specific functions
+
+```
+$G "$PWD" dp2q_master -process -noanalysis -readOnly -scriptPath $T/ghidra_scripts \
+   -postScript DP2QDecomp.java 0x40000088 str:GetBootMode some_name "out=$PWD/decomp/x.c"
+```
+
+Arguments: addresses, function names, or `str:<text>` (every function referencing a string containing it).
