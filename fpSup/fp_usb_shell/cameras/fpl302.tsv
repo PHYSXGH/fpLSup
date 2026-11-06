@@ -518,3 +518,8 @@
 0xc2f23a74	0xc2f339bc	verify	lossless menu/verify_recipe event table (host tool only): +0xFF48 like 0xc2f23848 (ptr(4)); unconfirmed
 0xc2f23a78	0xc2f339c0	verify	lossless menu/verify_recipe event table (host tool only): +0xFF48 like 0xc2f23848 (ptr(4)); unconfirmed
 0xc2f23a7c	0xc2f339c4	verify	lossless menu/verify_recipe event table (host tool only): +0xFF48 like 0xc2f23848 (ptr(4)); unconfirmed
+# stopfix (fpSup/stopfix, 05STOPFX), 2026-11-06: both functions compared instruction by instruction --
+# same length, every difference a BL to its mapped target or one data address (+0x2624C, the "raw del"
+# assertion strings); the branch between them is the same distance (0x588), the patch word unchanged
+0xc0377118	0xc0377330	checked	stopfix site: the stop-queue release entry (push {r4, r5, lr}), 80 instructions equal modulo mapped BLs + 0xC0B99930 -> 0xC0BBFB7C
+0xc03776a0	0xc03778b8	checked	stopfix target: native reference-counted release, 35 instructions equal modulo mapped BLs + 0xC0B999E4 -> 0xC0BBFC30

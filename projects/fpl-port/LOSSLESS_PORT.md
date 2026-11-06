@@ -44,7 +44,18 @@ compiler-rt): control 33, native modules 187 + per module, v3/v4/card emulation 
 results as the unmodified tree (test_native_variable 25 and test_header_tag 2 errors on both: a
 loader quirk and no `rawpy`; test_codec_job flaky).
 
+## STOPFX (2026-11-06)
+
+The stop-queue release LOSS's camera tests ran with (`fpSup/stopfix`, one patched word). Both
+functions compared instruction by instruction: identical modulo the mapped BLs and data (+0x2624C).
+`fpl302.tsv`: the site `0xC0377118 -> 0xC0377330` and the target `0xC03776A0 -> 0xC03778B8`, both
+`checked`; the distance is the same, so the patch word is still `0xEA000160`. `stopfix_fixture.py`
+maps both through `fwtarget.fw()`, checks the stock word (`0xE92D4030`) and computes the branch; the
+fp keeps its hash assert. Loader v4 module (`ports.stopfx()`): fp v3 `f9f26a09` unchanged, v4
+`253536ca`; fp L v4 `36505cc3`, `Stop-FX_v0.1.0.BIN` 340 B (differs from the fp's only in the site
+word). Emulated v4 boot with RES-Custom r22 + Lossless + Stop-FX: both add-ons LOADED, no error.
+(`test_ports_v4`'s ULWR released-bytes test fails with and without this change.)
+
 ## Open
 
-- STOPFX (`05STOPFX.BIN`, fp, Loader v3): the stop-queue release LOSS's camera tests ran with.
 - On the camera: the codec calls, the lossless menu row, the frame sizes past FHD / UHD.
