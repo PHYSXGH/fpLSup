@@ -698,3 +698,7 @@ fpl_formats.PREVIEW_MAX_DOWN = 3 and a test over every format. U48K.RCD `f5c71b4
 **On the camera (r16, 2026-11-05):** U48K records without the flashing (A001_163/164 at 23.98,
 A001_165 at 29.97: 4784x2688, clean, steady). The preview's 3x limit was the cause. The frame guide
 shows (the user).
+**Frame guides (camera, r16, 2026-11-06):** the stock frame guide now shows in all four formats (OG4K,
+OG48K, W48K, U48K), where before r16 it showed in none we tried. Not traced why (r16 changed only the
+U48K / W48K previews). For W48K a custom 2.81:1 guide marks the recorded band: the parked letterbox is
+covered for practical framing.
