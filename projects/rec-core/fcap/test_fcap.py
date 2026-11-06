@@ -2,6 +2,11 @@
 """FCAP under unicorn: the real loader v3 (fpSup's sloader, read-only) and the
 firmware's own compare at C063F826.
 
+FPSUP_CAMERA=fpl: the fp L runs Loader v4, so the same checks boot the v4 core
+(loader-v4/test_v4.py) with the v4 file (build_v4.from_v3), at the mapped site and
+compare sequence (instruction-identical: fpl302.tsv); the loader's exclusive-claim
+rule is camera-independent and stays the fp's test.
+
     python3 -B -m unittest test_fcap
 """
 import pathlib, struct, sys, unittest
@@ -15,21 +20,40 @@ sys.path.insert(0, str(V3.parent))
 
 import test_v3 as V                          # noqa: E402
 import build as F                            # noqa: E402
+import fwtarget                              # noqa: E402
+OTHER = fwtarget.target() != 'fp'
+if OTHER:
+    sys.path.insert(0, str(ROOT / 'fpSup' / 'loader-v4'))
+    import test_v4 as V4                     # noqa: E402
+    import build_v4 as B4                    # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_CPSR, UC_ARM_REG_PC  # noqa: E402
 from unicorn import UC_HOOK_CODE              # noqa: E402
 
-SITE = F.SITE
-CHECK = 0xC063F81C            # ldr r2,[sp,#0x14] ; movw r8,#0x4850 ; ldr.w r2,[r8,r2] ; cmp ; bne
-FLUSH = 0xC063F82C            # bl C063F140 -- the batch is sent
-SKIP = 0xC063F830             # bne target -- no flush
+SITE = fwtarget.fw(F.SITE)
+CHECK = fwtarget.fw(0xC063F81C)  # ldr r2,[sp,#0x14] ; movw r8,#0x4850 ; ldr.w r2,[r8,r2] ; cmp ; bne
+FLUSH = CHECK + 0x10          # bl C063F140 -- the batch is sent
+SKIP = CHECK + 0x14           # bne target -- no flush
 VOL = 0xC37D50D4              # SD volume object (0xC37D066C + 1 * 0x4A68)
 
 
 def boot(*sups):
-    files, dirs = V.card(*sups)
-    cam = V.Camera(files, dirs)
+    if OTHER:                                # the v4 core, the v4 file
+        files, dirs = V4.card(*[('EarlyFlush_v0.1.0.BIN', B4.from_v3(d, name='Early Flush'))
+                                for _, d in sups])
+        cam = V4.Camera(files, dirs)
+    else:
+        files, dirs = V.card(*sups)
+        cam = V.Camera(files, dirs)
     cam.boot()
     return cam
+
+
+def loaded(cam):
+    if OTHER:
+        codes = [c for c, *_ in cam.loadlog()]
+        return V4.CODES['LOADED'] in codes, V4.CODES['RELEASED'] in codes
+    kinds = [e[0] for e in cam.log()]
+    return 'LOADED' in kinds, 'RELEASED' in kinds
 
 
 def flushes_at(cam, count):
@@ -76,14 +100,13 @@ class Build(unittest.TestCase):
 class Load(unittest.TestCase):
     def test_loads_patches_journals_and_restores(self):
         cam = boot(('30FCAP.BIN', F.build()))
-        kinds = [e[0] for e in cam.log()]
-        self.assertIn('LOADED', kinds, cam.log())
-        self.assertNotIn('RELEASED', kinds)
+        self.assertEqual(loaded(cam), (True, False))
         self.assertEqual(cam.w(SITE), struct.unpack('<I', F.patched_word())[0])
         self.assertIn((SITE, 4, F.STOCK), cam.journal())
         cam.power_off()
         self.assertEqual(cam.w(SITE), struct.unpack('<I', F.STOCK)[0], 'power-off must restore stock')
 
+    @unittest.skipIf(OTHER, 'the loader rule, camera-independent: the fp run tests it')
     def test_exclusive_owner_refuses_a_second_claim(self):
         other = V.test_sup('ZZZ9', [(SITE, struct.unpack('<I', F.STOCK)[0], 2, 0x2A102002)])
         cam = boot(('10OTHER.BIN', other), ('30FCAP.BIN', F.build()))

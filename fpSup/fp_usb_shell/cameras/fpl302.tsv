@@ -558,3 +558,31 @@
 0xc351ff44	0xc3520d84	checked	lossless CinemaDNG frame registry: C0374220/C0374438's movw/movt, both loads
 0xc375896c	0xc3759334	checked	lossless status is_recording pointer: 3 matched refs in C040FD10..
 0xc8000000	0xc8000000	const	lossless card.c pointer sanity bound (top of the first 128 MB of cached RAM), not an address
+0xc063f824	0xc063d4d4	checked	Early Flush (FCAP) site: the batch-count compare C063F81C.. instruction-identical (vol +0x4828/+0x4850/+0x4A58, cmp r2,#0x80, bl C063F140 -> C063CDF0); stock word 0220802a
+0xc063f81c	0xc063d4cc	auto	exact (FCAP compare sequence)
+0xc063f048	0xc063ccf8	auto	exact (Unlock Writer: CinemaDNG file layer)
+0xc063f140	0xc063cdf0	auto	exact (Unlock Writer: batch submit, hooked)
+0xc063f149	0xc063cdf9	auto	exact (Unlock Writer)
+0xc063f220	0xc063ced0	auto	exact (Unlock Writer)
+0xc063f229	0xc063ced9	auto	exact (Unlock Writer)
+0xc063f310	0xc063cfc0	auto	exact (Unlock Writer: stop drain)
+0xc063f34d	0xc063cffd	auto	exact (Unlock Writer: stop-drain LR)
+0xc063f380	0xc063d030	auto	exact (Unlock Writer)
+0xc01eb791	0xc01e8011	auto	exact (Unlock Writer: driver write)
+0xc03a549c	0xc03a56b4	auto	exact (Unlock Writer)
+0xc03a54a4	0xc03a56bc	auto	exact (Unlock Writer)
+0xc0644b69	0xc0642819	auto	exact (Unlock Writer)
+0xc065f021	0xc065ccd1	auto	exact (Unlock Writer)
+0xc06702b9	0xc066df69	auto	exact (Unlock Writer)
+0xc2f2e750	0xc2f3eb04	checked	Unlock Writer WR_SD_MAXDESC (SD bytes per ADMA descriptor): movw/movt in 5 matched functions (C065F1F0..) all C2F3EB04
+0xc0019dc0	0xc0019dc0	auto	exact (Unlock Writer test_card: log stub)
+0xc001a048	0xc001a048	auto	exact (Unlock Writer test_card: log stub)
+0xc03a52d0	0xc03a54e8	auto	exact (Unlock Writer test_card: REC state stub)
+0xc03a54a0	0xc03a56b8	auto	exact (Unlock Writer: the word after the C03A549C hook)
+0xc065efe1	0xc065cc91	auto	exact (Unlock Writer test_card: SD ckpt)
+0xc065f001	0xc065ccb1	auto	exact (Unlock Writer test_card: SD rollback)
+0xc065f061	0xc065cd11	auto	exact (Unlock Writer test_card: SD add)
+0xc065f269	0xc065cf19	auto	exact (Unlock Writer test_card: SD release)
+0xc37d066c	0xc37d013c	checked	volume table base (Unlock Writer test_card VOL = base + n * 0x4A68): C0644B68's literal at C0644BCC; the lookup is instruction-identical (same stride)
+0xc37d50d4	0xc37d4ba4	checked	the SD volume object = 0xc37d013c + 1 * 0x4A68 (Unlock Writer test_card VOL)
+0xc3816e80	0xc3816940	checked	SD arena driver state (Unlock Writer test_card DRV): movw/movt in 8 matched SD arena functions (C065EFE0..) all C3816940

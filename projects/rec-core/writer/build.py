@@ -18,6 +18,7 @@ sys.path[:0] = [str(V3), str(V3.parent), str(ROOT / 'research/ui/tools/arm_text'
 import build_v3 as B                         # noqa: E402  (read-only use)
 from armasm import assemble, symbols         # noqa: E402
 import elf_text                              # noqa: E402
+import fwtarget                              # noqa: E402  (FPSUP_CAMERA: another camera's addresses)
 
 SUP_ID, VERSION = 'ULWR', 1
 OUT = HERE / 'build' / '20ULWR.BIN'
@@ -53,8 +54,20 @@ def unity(tree):
 
 def compile_c(tree, src, defines=()):
     obj = tree / (src.stem + '.o')
-    r = subprocess.run(['clang', *CFLAGS, *[f'-D{d}' for d in defines], '-I', str(tree), '-c', str(src), '-o', str(obj)],
-                       capture_output=True, text=True)
+    defs = [f'-D{d}' for d in defines]
+    if fwtarget.CAMERAS[fwtarget.target()] is None:
+        r = subprocess.run(['clang', *CFLAGS, *defs, '-I', str(tree), '-c', str(src), '-o', str(obj)],
+                           capture_output=True, text=True)
+    else:
+        # Another camera: preprocess, map every fp address the C spells (fwtarget.translate_c: an
+        # unmapped one is fatal), compile that -- loader-v4/build_v4.py's rule.
+        pre = tree / (src.stem + '.i')
+        r = subprocess.run(['clang', *CFLAGS, *fwtarget.c_defines(defs), '-I', str(tree), '-E', str(src),
+                            '-o', str(pre)], capture_output=True, text=True)
+        if not r.returncode:
+            pre.write_text(fwtarget.translate_c(pre.read_text(), src.name))
+            r = subprocess.run(['clang', *CFLAGS, '-x', 'cpp-output', '-c', str(pre), '-o', str(obj)],
+                               capture_output=True, text=True)
     if r.returncode:
         raise BuildError('compile failed:\n' + r.stderr)
     return obj
@@ -76,9 +89,14 @@ def sizeof_state(tree):
     raise BuildError('size probe missing')
 
 
+def sites():
+    """{this camera's site: stock prologue} (fp: SITES; another camera: mapped through fwtarget)"""
+    return {fwtarget.fw(a): hexs for a, hexs in SITES.items()}
+
+
 def check_sites():
-    img = B.IMAGE.read_bytes()
-    for a, hexs in SITES.items():
+    img = B.IMAGE.read_bytes()                 # this camera's image (build_v3: FPSUP_CAMERA)
+    for a, hexs in sites().items():
         if img[a - 0xC0000000:a - 0xC0000000 + 8].hex() != hexs:
             raise BuildError(f'0x{a:08X} is not the stock prologue in the reference image')
 
@@ -99,7 +117,7 @@ def build(defines=()):
     defs = lambda rel: [f'STATE_REL=0x{rel:X}'] + [f'{k}=0x{text.functions[v]:X}' for k, v in ENTRIES.items()]
     c_base = symbols(src, defs(0))['c_base']
     inner = lambda rel: (lambda code: code[:c_base] + text.code)(assemble(src, defs(rel)))
-    rows = [(a, bytes(8), SL_EXCL, 'claim') for a in SITES]
+    rows = [(a, bytes(8), SL_EXCL, 'claim') for a in sites()]
     probe = B.patch_sup(SUP_ID, rows, inner(0), inner_entry=0, version=VERSION)
     file_len = len(probe)
     inner_at = probe.index(inner(0)[:64])          # the inner blob ends the body

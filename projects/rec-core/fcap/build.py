@@ -49,9 +49,16 @@ def patched_word(cap=CAP):
 
 
 def build(cap=CAP):
-    if B.stock(SITE, 4) != STOCK:
-        raise BuildError(f'reference image has {B.stock(SITE, 4).hex()} at {SITE:#x}, not {STOCK.hex()}')
-    return B.patch_sup(SUP_ID, [(SITE, patched_word(cap), SL_EXCL)], version=VERSION)
+    """Another camera (FPSUP_CAMERA, fwtarget): the site mapped, the stock word read from that
+    camera's own image (fp L: projects/fpl-port/LOSSLESS_PORT.md, the compare sequence identical)."""
+    import fwtarget
+    site, image = SITE, None
+    if fwtarget.target() != 'fp':
+        site = fwtarget.fw(SITE)
+        image = (ROOT / f'out_{fwtarget.target()}' / 'MAIN_c0000000.bin').read_bytes()
+    if B.stock(site, 4, image) != STOCK:
+        raise BuildError(f'reference image has {B.stock(site, 4, image).hex()} at {site:#x}, not {STOCK.hex()}')
+    return B.patch_sup(SUP_ID, [(site, patched_word(cap), SL_EXCL)], version=VERSION)
 
 
 def main():

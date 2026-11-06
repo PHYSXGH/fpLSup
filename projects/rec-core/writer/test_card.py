@@ -33,23 +33,24 @@ if os.environ.get('ULWR_V4'):
     import test_v4 as V4                                     # noqa: E402
     import build_v4 as B4                                    # noqa: E402
 import build as RB                                           # noqa: E402
+from fwtarget import fw                                      # noqa: E402  (FPSUP_CAMERA: fpl302.tsv)
 from unicorn import UC_PROT_ALL                              # noqa: E402
 from unicorn.arm_const import *                              # noqa: E402,F403
 
-VOL = 0xC37D50D4                       # SD: 0xC37D066C + 1 * 0x4A68
+VOL = fw(0xC37D50D4)                       # SD: 0xC37D066C + 1 * 0x4A68
 DEV_ID = 1
 SS, SPC, HEAP_LBA = 512, 256, 0x8000
 CLUSTER = SS * SPC
 PAD = 0x4FF00000                       # stock's zero buffer (uncached, below 0xC0000000)
 DATA = 0x50000000                      # frame bytes (uncached alias, phys 0x10000000)
 TBL, BOUNCE = 0x43818EC8, 0x4381AECC
-DRV = 0xC3816E80                       # SD arena driver state
-MAXDESC = 0xC2F2E750
-STUBS = {'VOL_LOOKUP': 0xC0644B68, 'DEV_WRITE': 0xC01EB790, 'STOCK_CB': 0xC03A55D0,
-         'FLG_CREATE': 0xC00169EC, 'FLG_SET': 0xC0016B9C, 'FLG_WAIT': 0xC0016C08,
-         'REC_STATE': 0xC03A52D0, 'LOG_A': 0xC0019DC0, 'LOG_B': 0xC001A048}
+DRV = fw(0xC3816E80)                       # SD arena driver state
+MAXDESC = fw(0xC2F2E750)
+STUBS = {'VOL_LOOKUP': fw(0xC0644B68), 'DEV_WRITE': fw(0xC01EB790), 'STOCK_CB': fw(0xC03A55D0),
+         'FLG_CREATE': fw(0xC00169EC), 'FLG_SET': fw(0xC0016B9C), 'FLG_WAIT': fw(0xC0016C08),
+         'REC_STATE': fw(0xC03A52D0), 'LOG_A': fw(0xC0019DC0), 'LOG_B': fw(0xC001A048)}
 THUMB_STUBS = {'VOL_LOOKUP', 'DEV_WRITE'}
-SD = dict(acq=0xC065F021, add=0xC065F061, ckpt=0xC065EFE1, rb=0xC065F001, rel=0xC065F269)
+SD = dict(acq=fw(0xC065F021), add=fw(0xC065F061), ckpt=fw(0xC065EFE1), rb=fw(0xC065F001), rel=fw(0xC065F269))
 SLOT = dict(cb=0x4834, acq=0x4838, add=0x483C, ckpt=0x4840, rb=0x4844, rel=0x4848)
 DONE = V.DONE
 
@@ -201,8 +202,8 @@ class Take:
 
     def start(self):
         p = V.HEAP + 0x700000
-        for i, v in enumerate((0x04000000, PAD, 0x40000, 0xC03A55D0)): self.cam.put(p + 4 * i, v)
-        return self.cam.run(0xC063F220, r0=DEV_ID, r1=p)
+        for i, v in enumerate((0x04000000, PAD, 0x40000, fw(0xC03A55D0))): self.cam.put(p + 4 * i, v)
+        return self.cam.run(fw(0xC063F220), r0=DEV_ID, r1=p)
 
     def call_slot(self, slot, *args):
         """C063F380 calling through the vol (blx from Thumb)."""
@@ -210,7 +211,7 @@ class Take:
         return self.cam.run(a & ~1, *args, thumb=bool(a & 1), lr=DONE)
 
     def send(self, lr=DONE):
-        self.cam.run(0xC063F140, r0=VOL, lr=lr)
+        self.cam.run(fw(0xC063F140), r0=VOL, lr=lr)
 
     def extent(self, f, pieces):
         size = sum(n for _, n in pieces); ncl = -(-size // CLUSTER)
@@ -227,7 +228,7 @@ class Take:
         st = V.HEAP + 0x720000                      # C063F048's frame, &local_50
         for i, v in enumerate((VOL, lst, 0, 0, PAD, 0x40000, CLUSTER, cl, 0, size, 0, 0)):
             self.cam.put(st + 4 * i, v)
-        r = self.cam.run(0xC063F048, r0=st)
+        r = self.cam.run(fw(0xC063F048), r0=st)
         assert r == 0, f'C063F048 -> {r:#x}'
         assert self.cam.w(st + 0x2C) == ncl * CLUSTER
         if not self.rd(0x4A58): self.wr(0x4A54, cl)
@@ -270,7 +271,7 @@ class Take:
         for f in range(self.frames):
             self.frame(f)
             if self.rnd.random() < writer_bias: c.service()
-        assert c.run(0xC063F310, r0=DEV_ID, r1=stop_discard) == 1
+        assert c.run(fw(0xC063F310), r0=DEV_ID, r1=stop_discard) == 1
         self.stopped = True
         return self
 
@@ -290,7 +291,7 @@ class Take:
             c.mu.reg_write(reg, v)
         before = len(c.cookies)
         c.on_cookie = None
-        c.call(0xC03A549C, sp=sp, thumb=False)
+        c.call(fw(0xC03A549C), sp=sp, thumb=False)
         return c.cookies[before:]
 
     def check_cookie(self, frame, status):
@@ -303,16 +304,16 @@ class CardTests(unittest.TestCase):
     def test_loads_hooks_all_sites_and_restores_at_power_off(self):
         t = Take()
         c = t.cam
-        for site in (0xC063F140, 0xC063F220):
+        for site in (fw(0xC063F140), fw(0xC063F220)):
             self.assertEqual(c.w(site), 0xF000F8DF)          # ldr.w pc, [pc, #0]
             self.assertTrue(0xC5000000 <= c.w(site + 4) < 0xC5800000, hex(c.w(site + 4)))
-        self.assertEqual(c.w(0xC03A549C), 0xE51FF004)       # ldr pc, [pc, #-4]
-        self.assertTrue(0xC5000000 <= c.w(0xC03A54A0) < 0xC5800000)
-        for a, h in RB.SITES.items():
+        self.assertEqual(c.w(fw(0xC03A549C)), 0xE51FF004)       # ldr pc, [pc, #-4]
+        self.assertTrue(0xC5000000 <= c.w(fw(0xC03A54A0)) < 0xC5800000)
+        for a, h in RB.sites().items():
             self.assertIn((a, 8, bytes.fromhex(h)), c.journal())
         self.assertEqual(len(c.tasks), 1)
         c.power_off()
-        for a, h in RB.SITES.items():
+        for a, h in RB.sites().items():
             self.assertEqual(bytes(c.mu.mem_read(a, 8)).hex(), h)
 
     def test_take_through_firmware_code(self):
@@ -361,7 +362,7 @@ class CardTests(unittest.TestCase):
         for f in range(20): t.frame(f)
         self.assertEqual(t.after_write(0x8C7400), [])       # mid-take: the vol completes it
         t.cam.on_cookie = t.check_cookie
-        self.assertEqual(t.cam.run(0xC063F310, r0=DEV_ID, r1=0), 1)
+        self.assertEqual(t.cam.run(fw(0xC063F310), r0=DEV_ID, r1=0), 1)
         self.assertEqual(t.after_write(0x8C7400), [(t.NODE, 0)])
         self.assertEqual(t.start(), 1)                      # the next take
         self.assertEqual(t.after_write(0x8C7400), [])

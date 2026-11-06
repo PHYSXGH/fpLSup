@@ -98,6 +98,42 @@ LibRaw 0.22 (rawpy, temporary venv) to 1936x1090, max 4095. Differences between 
 scene/noise-sized (stock A001_193: consecutive 13-14, 20 frames apart 38; compressed consecutive
 4-31). Bit-exactness against the source frame is not proven on the fp L (no source copy taken).
 
+## Early Flush and Unlock Writer (2026-11-06)
+
+The two rec-core writer modules (projects/rec-core): Early Flush (FCAP, one word: the batch-count
+compare 128 -> 40, so compressed / small frames do not run the 94 usable frame slots out) and
+Unlock Writer (ULWR: card writes without the FS lock, three hooks + a writer task).
+
+- **Addresses** (`fpl302.tsv`, 28 rows): the CinemaDNG file layer C063F048..C063F380 moved as one
+  block (-0x2350), all exact; the FCAP compare sequence instruction-identical (vol +0x4828 /
+  +0x4850 / +0x4A58, stock word `0220802a`); `WR_SD_MAXDESC` 0xC2F2E750 -> 0xC2F3EB04 by five
+  matched references. Test-only RAM: the volume table 0xC37D066C -> 0xC37D013C (same 0x4A68
+  stride), the SD arena driver state 0xC3816E80 -> 0xC3816940.
+- **Builds**: `fcap/build.py` maps the site and checks the stock word in the camera's image;
+  `writer/build.py` maps its sites and now translates its C for another camera (it had the
+  same untranslated-C gap as Lossless). fp unchanged: FCAP v3 `d2b22eda`, ULWR v3 `702c978f`
+  (clang 22; neither clang reproduces the released `db37011b` -- built elsewhere 2026-10-22,
+  test_ports_v4's pre-existing failure). fp L: `EarlyFlush_v0.1.0.BIN` v4 `4b7974f2` (344 B),
+  `UnlockWriter_v0.1.0test.BIN` v4 `341d44af` (5112 B); no fp-only address (movw/movt included).
+- **Tests**: `test_fcap` under FPSUP_CAMERA=fpl boots the v4 core and runs the fp L's own
+  compare: flushes at 40 only; mutation: stock fp L firmware flushes only at 128. `test_card`
+  (ULWR_V4=1) with its addresses through `fw()`: all 9 on the fp L (a full take through the fp L
+  file-layer code, device failure, late frame, the three mutations); fp v3 / v4 unchanged.
+  Emulated boot of all five fp L modules (test_card's camera, which stubs the writer's task and
+  flag): all LOADED, 15 journalled sites, no claim conflict.
+- Card r26 = r25 + both.
+- **r26 on the camera (2026-11-06):** all seven modules LOADED; in RAM the FCAP word reads
+  `2A282002`, the three ULWR hooks point into its block. A001_197, FHD 59.94 12-bit, Lossless ON:
+  **1,863 frames (~31 s), recorded to the end** (the fp without FCAP: ~2 s); 1,838 compressed,
+  16 passed with both lanes busy, 8 codec jobs given up after 50 ms (stalls; their frames written
+  stock), mean codec 13.9 ms. A001_198, Lossless OFF, 59.94: 150 frames, then the stock stop for a
+  card too slow for ~194 MB/s (the one native RAW error / missing slot in the status). A001_196
+  (an earlier take, 744 frames, 743 compressed). All three: no numbering gaps, compression tags
+  as the status said, every frame decodes (LibRaw).
+
 ## Open
 
+- 8 codec stalls in 1,846 jobs at FHD 59.94 (A001_197): frames kept, uncompressed. Not seen in the fp's
+  59.94 notes; not traced.
+- Unlock Writer's own speed gain is not measured on the fp L (needs a take at the card's limit, with and without).
 - On the camera: the codec calls, the lossless menu row, the frame sizes past FHD / UHD.
