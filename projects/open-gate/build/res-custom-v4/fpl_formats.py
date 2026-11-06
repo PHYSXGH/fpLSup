@@ -240,11 +240,14 @@ ROWS['uhdc'] = dict(
     modes=[(196, 5994, 534, 0, 16)],
     canvas_rec=[(0xF4, UHDC_READ[0]), (0xF8, UHDC_READ[1]),
                 (0x60, OG48K_RESIZE), (0x64, OG48K_RESIZE), (0xD0, OG48K_RESIZE), (0xD4, OG48K_RESIZE)]
-               + [(0x0C, 1616), (0x10, 908), (0x20, 1608), (0x28, 904)]    # the preview, as U48K's
-               # the crop-window fields stock's crop steps set (p2079: 42 / 1296 / 2190), tuned live
-               # (camera r20, test 2): +0xD8 = the preview's width, +0xE0 = the read's height -- the
-               # bands at the top and bottom gone; the picture still squeezed (ISSUES.md 2)
-               + [(0xA4, 42), (0xD8, 1616), (0xE0, 2174)],
+               # The recording live view (ISSUES.md 2): the camera draws it from a box of the read / 3
+               # (2088 x 710) and shows a centred window of +0xD8 - 8 box columns by +0xE0 / 3 - 14
+               # rows; +0xD8 must equal the preview's width (+0x0C) and +0xE0 three times its height,
+               # as in stock's crop steps (p2079: 1296 x 730 / 1296 / 2190). 1288 / 2172 give a
+               # 1280 x 710 window = the recorded 3840 columns (camera 2026-11-06, RAM: centred, not
+               # squeezed); 1616 / 2174 (r20 test 2) showed 1608 x 710, ~1.27x too wide a window.
+               + [(0x0C, 1288), (0x10, 724), (0x20, 1280), (0x28, 720)]
+               + [(0xA4, 42), (0xD8, 1288), (0xE0, 2172)],
     canvas_pb=[],
     rate_canvas=[],
     # the camera's crop factor while UHDC records: its live view's area is placed by it (9568 / 3856

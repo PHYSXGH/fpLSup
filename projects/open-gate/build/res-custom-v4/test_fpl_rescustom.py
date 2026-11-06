@@ -360,10 +360,12 @@ class FplBuildTests(unittest.TestCase):
                          (2061, (3840, 2160), 3, 0, []))
         rec = dict(d['canvas_rec'])
         self.assertEqual((rec[0xF4], rec[0xF8], rec[0x60], rec[0xD0]), (6288, 2174, 1023, 1023))
-        # the recording preview: U48K's 1616x908 (p2061's flashed, the crop step's froze; camera r17 / r18)
-        self.assertEqual((rec[0x0C], rec[0x10], rec[0x20], rec[0x28]), (1616, 908, 1608, 904))
-        # the crop window, tuned live (r20 test 2): +0xD8 the preview width, +0xE0 the read height
-        self.assertEqual((rec[0xA4], rec[0xD8], rec[0xE0]), (42, rec[0x0C], rec[0xF8]))
+        # the recording live view (ISSUES.md 2, camera 2026-11-06): a centred window of the recorded
+        # 3840 columns -- +0xD8 = the preview's width, +0xE0 = 3 x its height, as stock's crop steps;
+        # window (+0xD8 - 8) x (+0xE0 / 3 - 14) = 1280 x 710 of the read / 3 box: 16:9, not squeezed
+        self.assertEqual((rec[0x0C], rec[0x10], rec[0x20], rec[0x28]), (1288, 724, 1280, 720))
+        self.assertEqual((rec[0xA4], rec[0xD8], rec[0xE0]), (42, rec[0x0C], 3 * rec[0x10]))
+        self.assertAlmostEqual((rec[0xD8] - 8) / (rec[0xE0] // 3 - 14), 16 / 9, delta=0.03)
         self.assertNotIn(0x00, rec)                                  # p2061's own 3856 x 2170
         tt = {}
         for i in range(85):
