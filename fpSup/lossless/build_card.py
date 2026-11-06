@@ -200,7 +200,11 @@ def unity(tree: pathlib.Path) -> pathlib.Path:
         private = sorted({s for s in re.findall(
             r'^(?:static|INLINE)\s[^(=;]*?\b(\w+)\s*\(', text, re.M)
             if not s.startswith(('fpl_', 'uis_', 'uia_'))})
-        macros = sorted(set(re.findall(r'^\s*#\s*define\s+(\w+)', text, re.M)))
+        # not the command line's (-D): a unit's `#ifndef X / #define X default` must not undefine
+        # them for the units after it (FPSUP_FIRMWARE: control.c's fallback took the fp L's 302
+        # away from producer_facts.c, which then stamped 502 and every take was refused)
+        macros = sorted(set(re.findall(r'^\s*#\s*define\s+(\w+)', text, re.M)) -
+                        {f[2:].split('=')[0] for f in CFLAGS if f.startswith('-D')})
         lines += [f'#define {s} {path.stem}__{s}' for s in private]
         lines.append(f'#include "{path}"')
         lines += [f'#undef {s}' for s in private] + [f'#undef {m}' for m in macros]
@@ -216,9 +220,28 @@ def compile_c(tree, unit, extra=''):
         source.write_text(unit.read_text() + extra)
     obj = tree / (source.stem + '.o')
     clang = shutil.which('clang') or 'clang'
-    r = subprocess.run([clang] + CFLAGS + ['-c', '-I', str(tree), '-I', str(tree / 'native'),
-                                           '-I', str(tree / 'uishare'),
-                        str(source), '-o', str(obj)], capture_output=True, text=True)
+    inc = ['-I', str(tree), '-I', str(tree / 'native'), '-I', str(tree / 'uishare')]
+    if fwtarget.CAMERAS[fwtarget.target()] is None:
+        r = subprocess.run([clang] + CFLAGS + ['-c'] + inc + [str(source), '-o', str(obj)],
+                           capture_output=True, text=True)
+    else:
+        # Another camera: preprocess, map every fp address the C spells through the camera's
+        # table (fwtarget.translate_c: an unmapped one is fatal), compile that -- build_v4.py's
+        # rule. The -D values are this camera's already and go in as decimal.
+        pre = tree / (source.stem + '.i')
+        r = subprocess.run([clang] + fwtarget.c_defines(CFLAGS) + ['-E'] + inc + [str(source), '-o', str(pre)],
+                           capture_output=True, text=True)
+        if not r.returncode:
+            pre.write_text(fwtarget.translate_c(pre.read_text(), source.name))
+            flags, skip = [], False             # preprocessed: the -I (and -D) have done their work
+            for f in CFLAGS:
+                if skip or f == '-I':
+                    skip = not skip and f == '-I'
+                    continue
+                if not f.startswith(('-D', '-I')):
+                    flags.append(f)
+            r = subprocess.run([clang] + flags + ['-x', 'cpp-output', '-c', str(pre), '-o', str(obj)],
+                               capture_output=True, text=True)
     if r.returncode:
         raise BuildError('compile failed:\n' + r.stderr)
     return obj

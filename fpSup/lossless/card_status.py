@@ -20,7 +20,8 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / 'fp_usb_shell'))
 
-ARENA, ARENA_END = 0xC072E064, 0xC072EFB4
+import fwtarget                                  # noqa: E402  (FPSUP_CAMERA: this camera's cave)
+ARENA, ARENA_END = fwtarget.fw(0xC072E064), fwtarget.fw(0xC072EFB4)
 MAGIC = 0x43504C46                      # "FLPC"
 ARRAY_WORDS = {'hold.refused_by': 8, 'play.refused_by': 12, 'hold.job.stall_regs': 8,
                'hold_b.job.stall_regs': 8, 'record_diag.drops': 16 * 15}

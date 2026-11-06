@@ -523,3 +523,38 @@
 # assertion strings); the branch between them is the same distance (0x588), the patch word unchanged
 0xc0377118	0xc0377330	checked	stopfix site: the stop-queue release entry (push {r4, r5, lr}), 80 instructions equal modulo mapped BLs + 0xC0B99930 -> 0xC0BBFB7C
 0xc03776a0	0xc03778b8	checked	stopfix target: native reference-counted release, 35 instructions equal modulo mapped BLs + 0xC0B999E4 -> 0xC0BBFC30
+0xc000ec14	0xc000ec14	auto	exact (lossless card.c: irq off)
+0xc000ec24	0xc000ec24	auto	exact (lossless card.c: irq restore)
+0xc001cf18	0xc001cf18	auto	exact (lossless raw_workspace)
+0xc001cfd8	0xc001cfd8	auto	exact (lossless)
+0xc001d3d0	0xc001d3d0	auto	exact (lossless)
+0xc00ba378	0xc00b6b20	auto	exact (lossless header_tag: IFD builder)
+0xc0135d41	0xc01325c1	auto	exact (lossless producer_facts)
+0xc0374220	0xc0374438	auto	exact (lossless: CinemaDNG frame registry getter)
+0xc03753c0	0xc03755d8	auto	exact (lossless frame_hold)
+0xc038bf0c	0xc038c124	auto	exact (lossless record_diag)
+0xc038c0a8	0xc038c2c0	auto	exact (lossless record_diag)
+0xc0398d48	0xc0398f60	auto	exact (lossless record_diag)
+0xc05a6890	0xc05a2a70	checked	lossless codec engine init (ARM): same instructions; its blx C062F5A8 -> C062BA10 (-0x3B98, the codec's delta); preceding function 0x98 shorter, AddrMap: gap
+0xc062f441	0xc062b8a9	checked	lossless codec engine flag (Thumb): same code modulo movw/movt of RAM, codec delta -0x3B98 (AddrMap: ptr-between, wrong)
+0xc062f4e1	0xc062b949	auto	exact (lossless codec)
+0xc062f6c1	0xc062bb29	auto	exact (lossless codec)
+0xc062fcb1	0xc062c119	auto	exact (lossless codec)
+0xc062fce1	0xc062c149	auto	exact (lossless codec)
+0xc062fcf9	0xc062c161	auto	exact (lossless codec)
+0xc062fe71	0xc062c2d9	auto	exact (lossless codec)
+0xc062fe81	0xc062c2e9	auto	exact (lossless codec)
+0xc062fe91	0xc062c2f9	auto	exact (lossless codec)
+0xc062fe99	0xc062c301	auto	exact (lossless codec)
+0xc062feb1	0xc062c319	auto	exact (lossless codec)
+0xc062fec1	0xc062c329	auto	exact (lossless codec)
+0xc062fed9	0xc062c341	auto	exact (lossless codec)
+0xc069b930	0xc06995b8	auto	exact (lossless)
+0xc069b9b8	0xc0699640	auto	exact (lossless)
+0xc2f1f3d8	0xc2f2f340	checked	lossless frame pool object pointer: movw/movt in 5 matched functions (C03739C4, C0380454..) all read C2F2F340
+0xc302cdd4	0xc302cdd4	checked	lossless codec ENGINE_BLOCK: movw/movt in the matched codec (C062F5D2..) unchanged, 24 refs
+0xc302cdec	0xc302cdec	checked	lossless codec TILE_COUNT_VAR: 4 matched codec refs unchanged
+0xc31ac4ec	0xc31ab0d0	checked	lossless header-template Subject list: movw/movt at C00577F4 (exact) -> C31AB0D0; -0x141C as MODE_OBJ (0xc31ac530)
+0xc351ff44	0xc3520d84	checked	lossless CinemaDNG frame registry: C0374220/C0374438's movw/movt, both loads
+0xc375896c	0xc3759334	checked	lossless status is_recording pointer: 3 matched refs in C040FD10..
+0xc8000000	0xc8000000	const	lossless card.c pointer sanity bound (top of the first 128 MB of cached RAM), not an address
