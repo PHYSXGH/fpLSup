@@ -148,4 +148,5 @@ def remove():
     print('vectors restored')
 
 
-{'readcp': readcp, 'vectors': vectors, 'install': install, 'read': read, 'remove': remove}[sys.argv[1]]()
+if __name__ == '__main__':
+    {'readcp': readcp, 'vectors': vectors, 'install': install, 'read': read, 'remove': remove}[sys.argv[1]]()

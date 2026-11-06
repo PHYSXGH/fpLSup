@@ -91,6 +91,32 @@ SITES = {                           # site: (stock word, what it is)
     0xC05E61E0: (0x69406902, 'string remain (nested string layers)'),
 }
 SHARED_SITES = {0xC05E5B58, 0xC05E61C8, 0xC05E61E0}   # declared by others too
+
+# Another camera (FPSUP_CAMERA, fwtarget): the same sites at its addresses, each stock word read from
+# its image and accepted only as the same instruction -- identical, or a BL to the mapped target (a
+# BL's word encodes the distance, which moves with the code).  The fp keeps the table above as it is.
+import fwtarget                                           # noqa: E402
+if fwtarget.target() != 'fp':
+    IMAGE = ROOT / f'out_{fwtarget.target()}' / 'seg0_c0000000.bin'
+    IMAGE_SHA256 = {'fpl': 'fb8c20968e01ff9d8edf5f3e3f681c7341958048a004e717092c75e11106d4b9'}[fwtarget.target()]
+
+    def _bl_target(site, w):
+        off = w & 0xFFFFFF
+        return site + 8 + 4 * (off - (1 << 24) if off & 0x800000 else off)
+
+    def _ported(site, stock, what):
+        at = fwtarget.fw(site)
+        word, = struct.unpack_from('<I', IMAGE.read_bytes(), at - 0xC0000000)
+        if stock & 0xFF000000 == 0xEB000000:              # bl: the same call, mapped
+            if word & 0xFF000000 != 0xEB000000 or \
+                    _bl_target(at, word) != fwtarget.fw(_bl_target(site, stock)):
+                raise SystemExit(f'0x{site:08X} ({what}): 0x{at:08X} holds 0x{word:08X}, '
+                                 f'not a BL to the mapped 0x{_bl_target(site, stock):08X}')
+        elif word != stock:
+            raise SystemExit(f'0x{site:08X} ({what}): 0x{at:08X} holds 0x{word:08X}, not 0x{stock:08X}')
+        return at, (word, what)
+    SITES = dict(_ported(a, w, d) for a, (w, d) in SITES.items())
+    SHARED_SITES = {fwtarget.fw(a) for a in SHARED_SITES}
 # The fields a host reads after a test take, by their path in struct fpl_card.
 # Their offsets are taken from the ARM compile itself, never computed on the
 # host, whose pointers are a different size.
@@ -149,6 +175,8 @@ CFLAGS = ['--target=armv7a-none-eabi', '-mcpu=cortex-a9', '-mthumb', '-mfloat-ab
           '-mfpu=none', '-mstackrealign', '-ffreestanding', '-fno-builtin', '-nostdlib', '-fno-jump-tables',
           '-fropi', '-fno-addrsig', '-O2', '-std=c11', '-Wall', '-Wextra', '-Werror',
           '-Wno-unused-function']
+if fwtarget.target() == 'fpl':      # the fp L: its firmware version, its memory map (frame_hold / flush_site)
+    CFLAGS += ['-DFPSUP_FIRMWARE=302', '-DFPSUP_CAMERA_FPL=1']
 PUBLIC = re.compile(r'^(?!typedef\b|static\b|extern\b|#|enum\b|union\b|struct\s+\w+\s*\{)'
                     r'((?:USED\s+)?(?:const\s+)?(?:struct\s+\w+|u?int\w*_t|void|uintptr_t)'
                     r'\s*\**\s*(?:fpl|uis|uia)_\w+\s*\()', re.M)
@@ -210,6 +238,14 @@ def symbol_size(obj: pathlib.Path, name: str) -> int:
     raise BuildError(f'{name} not in {obj.name}')
 
 
+def stock_defines():
+    """card.S's three BL stock words for another camera (decimal: not translated again); none on the fp"""
+    if fwtarget.target() == 'fp':
+        return []
+    return [f'{n}_W={SITES[fwtarget.fw(a)][0]}' for n, a in
+            (('STOCK_REC', 0xC03A33C8), ('STOCK_FLUSH', 0xC03A5490), ('STOCK_DISCARD', 0xC037DEF8))]
+
+
 def check_sites():
     image = IMAGE.read_bytes()
     if hashlib.sha256(image).hexdigest() != IMAGE_SHA256:
@@ -242,7 +278,7 @@ def build_blob(tmp: pathlib.Path):
     layout = {f: symbol_size(probed, f'fpl_off_{i}') - 1 for i, f in enumerate(FIELDS)}
     card = NATIVE / 'card.S'
     probe = [f'BLOB_LEN=0x4', f'BLOCK_BYTES=0x{BLOCK_BYTES:X}', 'STATE_OFF=0x4'] + \
-            [f'{k}=0x1' for k in ENTRIES]
+            [f'{k}=0x1' for k in ENTRIES] + stock_defines()
     c_base = symbols(card, probe)['c_base']
     blob_len = c_base + len(text.code)
     blob_len += -blob_len % 8
@@ -252,6 +288,7 @@ def build_blob(tmp: pathlib.Path):
     defines = [f'BLOB_LEN=0x{blob_len:X}', f'BLOCK_BYTES=0x{BLOCK_BYTES:X}',
                f'STATE_OFF=0x{state_off:X}'] + \
               [f'{k}=0x{text.functions[v]:X}' for k, v in ENTRIES.items()]
+    defines += stock_defines()
     launcher = assemble(card, defines)
     if symbols(card, defines)['c_base'] != c_base or len(launcher) < c_base:
         raise BuildError('card.S moved between passes')

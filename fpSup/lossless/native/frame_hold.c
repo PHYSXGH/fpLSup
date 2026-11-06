@@ -77,7 +77,15 @@ static uint32_t native_enqueue_raw(uintptr_t creator, uint32_t id, uint32_t argu
 }
 #define peek(a) (*(volatile const uint32_t *)(a))
 #define poke(a, v) (*(volatile uint32_t *)(a) = (v))
+#if FPSUP_CAMERA_FPL
+/* fp L (MMU, camera 2026-11-06): VA 0x40000000-0xBFFFFFFF is all RAM at PA = VA, non-cacheable; VA
+ * 0xC0000000-0xFFFFFFFF is the first GB again, cached.  No uncached mirror at +0x40000000: there it
+ * is the second gigabyte.  Uncached = the identity, or the cached view's address - 0x80000000. */
+#define uncached(a) ((uintptr_t)(a) >= 3221225472u /* 0xC0000000, decimal: not an address to map */ \
+    ? (uintptr_t)(a) - 0x80000000u : (uintptr_t)(a))
+#else
 #define uncached(a) ((uintptr_t)(a) + 0x40000000u)
+#endif
 #define barrier() __asm__ volatile("dsb sy" ::: "memory")
 static uint32_t irq_off(void) {                   /* C000EC14: old CPSR, I+F set */
     typedef uint32_t (*fn)(void);

@@ -1,4 +1,7 @@
 #include "producer_facts.h"
+#ifndef FPSUP_FIRMWARE
+#define FPSUP_FIRMWARE 502
+#endif
 
 /* Where each fact comes from, all Ver.5.02 [C]:
  *
@@ -179,7 +182,7 @@ uint32_t fpl_producer_facts_read(void *facts, uint32_t reserved_bytes,
         (result = probe(f->sd_media, f->probe_context, &out->media)) != FPL_OK)
         return facts_fail(f, out, result);
 
-    out->firmware = 502;            /* this file is built for 5.02 addresses */
+    out->firmware = FPSUP_FIRMWARE; /* the firmware this build's addresses are for (5.02 / fp L 3.02) */
     out->bits = seen.bits;
     out->width = seen.width;
     out->height = seen.height;

@@ -46,6 +46,7 @@ SITE_COUNT = 13                    # card.S `claims`; the same sites as build_ca
 KINDS = {1: 'CHAIN', 2: 'EXCL', 3: 'SHARED_UI'}
 WANT_KIND = {0xC038BFF0: 2, 0xC05BDDAC: 2,                     # arrive, clip size
              0xC05E5B58: 3, 0xC05E61C8: 3, 0xC05E61E0: 3}     # uishare string layers
+WANT_KIND = {C.fwtarget.fw(a): k for a, k in WANT_KIND.items()}   # this camera's sites (fp: unchanged)
 
 
 def menu_block():
@@ -75,7 +76,7 @@ def build_blob(tmp, menu, v4=False):
     tree.mkdir()
     unit = C.unity(tree)
     card = HERE / 'native' / 'card.S'
-    v3 = ['V3=1'] + (['V4=1'] if v4 else [])
+    v3 = ['V3=1'] + (['V4=1'] if v4 else []) + C.stock_defines()   # another camera's BL stock words
     probe = v3 + ['BLOB_LEN=0x4', 'BLOCK_BYTES=0x4', 'STATE_OFF=0x4'] + \
             [f'{k}=0x1' for k in C.ENTRIES]
     probed_syms = symbols(card, probe)

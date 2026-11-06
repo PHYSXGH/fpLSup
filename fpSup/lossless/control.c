@@ -1,4 +1,7 @@
 #include "control.h"
+#ifndef FPSUP_FIRMWARE
+#define FPSUP_FIRMWARE 502          /* the camera firmware this build's addresses are for (fp L: 302) */
+#endif
 
 static uint32_t valid(const struct fpl_state *s) {
     return s && s->magic == FPL_MAGIC && s->abi == FPL_ABI &&
@@ -28,7 +31,7 @@ static uint32_t capture_eligible(const struct fpl_context *c) {
      * height, both <= 0x4000. This is only candidate eligibility: the
      * adapter still has to prove packing, complete source coverage, bounded
      * output, writer/metadata/lifetime and rate support for this tuple. */
-    if (c->firmware != 502 || c->cine != 1 || c->compression != 1 ||
+    if (c->firmware != FPSUP_FIRMWARE || c->cine != 1 || c->compression != 1 ||
         (c->bits != 10 && c->bits != 12) ||
         c->width < 8 || c->width > 0x4000 || (c->width & 7u) ||
         c->height < 2 || c->height > 0x4000 || (c->height & 1u) ||

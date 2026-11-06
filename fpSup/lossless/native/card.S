@@ -32,13 +32,19 @@
 .equ CARD_MAGIC,   0x43504C46    /* "FLPC": how a host finds the state        */
 
 .equ SITE_REC,     0xC03A33C8
-.equ STOCK_REC,    0xEBFFFC1A    /* bl C03A2438                               */
+#ifndef STOCK_REC_W     /* a BL: another camera passes its own word (build_card.SITES) */
+#define STOCK_REC_W 0xEBFFFC1A
+#endif
+.equ STOCK_REC, STOCK_REC_W /* bl C03A2438 */
 .equ SITE_ARRIVE,  0xC038BFF0
 .equ STOCK_ARRIVE, 0xE12FFF33    /* blx r3 -- the creator's vtable call       */
 .equ SITE_STOP,    0xC0398D88
 .equ STOCK_STOP,   0xE92D49F0    /* push {r4-r8, fp, lr}: the entry           */
 .equ SITE_FLUSH,   0xC03A5490
-.equ STOCK_FLUSH,  0xEB0BD652    /* bl C069ADE0                               */
+#ifndef STOCK_FLUSH_W     /* a BL: another camera passes its own word (build_card.SITES) */
+#define STOCK_FLUSH_W 0xEB0BD652
+#endif
+.equ STOCK_FLUSH, STOCK_FLUSH_W /* bl C069ADE0 */
 .equ SITE_PLAY,    0xC05C0EA4    /* the player's frame read, after its f_read */
 .equ STOCK_PLAY,   0xE595201C    /* ldr r2, [r5, #0x1c]                       */
 .equ SITE_CLIP,    0xC05BDDAC    /* clip open: the first frame's size stored  */
@@ -56,7 +62,10 @@
 .equ STOCK_EVENT,  0xE594300C    /* ldr r3, [r4, #0xc]                        */
 .equ EVENT_RESUME, 0xC038BD0C
 .equ SITE_DISCARD, 0xC037DEF8    /* each frame popped by C037DEE0             */
-.equ STOCK_DISCARD,0xEB000042    /* bl C037E008                               */
+#ifndef STOCK_DISCARD_W     /* a BL: another camera passes its own word (build_card.SITES) */
+#define STOCK_DISCARD_W 0xEB000042
+#endif
+.equ STOCK_DISCARD, STOCK_DISCARD_W /* bl C037E008 */
 .equ REAL_DISCARD, 0xC037E008
 
 /* Passed in by the builder: BLOB_LEN, BLOCK_BYTES, STATE_OFF and the C
