@@ -81,20 +81,25 @@ and LOADER_V4.md (loader); each entry names the card it was seen on. Newest firs
 4. **The frame guide does not show in the 3:2 formats** (OG4K, OG48K). It does show in the 16:9 ones
    (U48K, W48K, UHDC). Probably tied to the core's 3:2 display box change. Not traced.
 
-5. **W48K's recording preview:** r16 made it even (1616x572). Whether it now looks right while
+5. **Grid-line overlays cover only the 16:9 area in the 3:2 formats** (the user, 2026-11-06, card
+   r22; noted, not acted on). The camera's ratio grid-line overlay draws over the 16:9 part of the
+   live view when OG4K / OG48K is selected, not over the whole 3:2 picture. Likely the same cause as
+   4 (the overlays still use the 16:9 display box while the core's 3:2 box is shown).
+
+6. **W48K's recording preview:** r16 made it even (1616x572). Whether it now looks right while
    recording has not been checked.
 
-6. **Recording to an SSD is untested** with RES-Custom formats. The 1:1 formats need more than the SD
+7. **Recording to an SSD is untested** with RES-Custom formats. The 1:1 formats need more than the SD
    card can write (OG48K ~365 MB/s at 23.98, W48K ~490 MB/s at 59.94, U48K ~385 MB/s at 29.97,
    UHDC ~500 MB/s at 59.94); clips on the SD card stop after a second or two.
 
 ## Loader v4 / USB shell
 
-7. **The USB shell does not answer after a Fast Start restart** (power switch); it does after a
+8. **The USB shell does not answer after a Fast Start restart** (power switch); it does after a
    battery-pull cold boot. Seen since card r4.
 
-8. **LOAD.LOG stays empty after some boots** (2026-11-04, card r7): the core clearly loaded, so the
-   log path probably differs on the Fast Start boot. Check together with 7.
+9. **LOAD.LOG stays empty after some boots** (2026-11-04, card r7): the core clearly loaded, so the
+   log path probably differs on the Fast Start boot. Check together with 8.
 
 ## Build environment (not bugs, but needed)
 
