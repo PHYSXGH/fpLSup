@@ -65,7 +65,7 @@ is the read size multiplied by the binning, and **Aspect** is that area's aspect
 | 3184x2124 | 2x2 | 6368x4248 | 131, 146 | 38, 10 | 38.43 | 1.50 | 3:2 | - |
 | 6288x4192 | 1x1 | 6288x4192 | 129, 145, 130 | 9, 10, 17 | 17.92 | 1.52 | 3:2 | - |
 | 6288x3528 | 1x1 | 6288x3528 | 162-165 | 23.98-29.97 | 29.97 | 1.52 | 16:9 | - |
-| 6288x2174 | 1x1 | 6288x2174 | 196-203 | 23.98-59.94 | 59.94 | 1.52 | 2.89:1 | - |
+| 6288x2174 | 1x1 | 6288x2174 | 196-203 | 23.98-59.94 | 59.94 | 1.52 | 2.89:1 | **UHDC** (3856x2170 1:1 from the centre: 3840 of 9568 columns, ~2.5x crop) |
 
 ## Notes
 
@@ -80,6 +80,8 @@ is the read size multiplied by the binning, and **Aspect** is that area's aspect
 - **A RES-Custom format** names a donor mode; the core makes one virtual mode (ids 230..) that clones
   the donor's rows from every per-mode table (RESCUSTOM_PORT.md). Up to 6 formats on the menu at once,
   16 .RCD files read, 18 virtual profile ids, 16 virtual modes.
+- **UHDC** (196..203) cuts stock UHD's frame 1:1 from the middle of the 1.52x band, so it records
+  UHD up to 59.94 (stock UHD: 29.97) at a ~2.5x crop.
 - **Candidates not used yet:** the full-resolution 9568x6380 open gate (1x1, up to 17.9 fps,
   ~61 MB a frame at 8-bit); the 1.52x crop at 6288x4192 (1x1, 17.9 fps); the 1.5x crop 3:2 binned
   (3184x2124 2x2, mode 131, 38 fps).

@@ -219,6 +219,38 @@ ROWS['u48k'] = dict(
     bit_depths=(8, 10, 12),
 )
 
+# UHDC (the user, 2026-11-06): stock UHD's frame (3856x2170 / 3840x2160) cut 1:1 from the middle of
+# mode 196's 6288x2174 unbinned read (the 1.52x crop band) -- 3840 of the sensor's 9568 columns, a
+# ~2.5x crop -- up to 59.94 (stock UHD stops at 29.97).  Modes 196..203 differ only in frame length
+# (hmax 534): one donor, each stock rate at SIGMA's own words.  The canvas is p2061's but for the read
+# and the 1:1 resize, as stock's largest UHD crop step (p2019: 8208x4320 -> 3856x2170 at 1023).
+# No playback pairs: its clips are stock UHD size (and ogc_name leaves it out of the size match).
+# Live view: the stock 16:9 view of the whole sensor, not the crop (a frame guide marks it).
+UHDC_READ = (6288, 2174)
+# UHDC's recording live view: with p2061's preview (1288x724, 2.99x / 3.00x below its frame) it
+# flashed pink (camera, r17); with the stock crop step's fields (p2079: preview 1296x730, +0xA4 42,
+# +0xD8 / +0xE0 1296 / 2190) it froze on a garbage frame (r18) -- those are 8208x4320's, not this
+# read's.  r19: U48K's larger preview, 1616x908 (2.39x).
+ROWS['uhdc'] = dict(
+    label='UHDC', profile=OG4K_BASE, enum=14,                   # uishare ui/enums.py 'UHDC'
+    stock_value=3, aspect=3, flags=0, video_base=True,
+    donor_timing=(196, 0x05160216, 0x001008C8),                 # hmax 534 | tail 1302, vmax 2248 | x 16
+    capture_modes={2398: 203, 2400: 202, 2500: 201, 2997: 200, 4800: 198, 5000: 197, 5994: 196},
+    rec=[3856, 2170], act=[3840, 2160], prev_h=0,
+    modes=[(196, 5994, 534, 0, 16)],
+    canvas_rec=[(0xF4, UHDC_READ[0]), (0xF8, UHDC_READ[1]),
+                (0x60, OG48K_RESIZE), (0x64, OG48K_RESIZE), (0xD0, OG48K_RESIZE), (0xD4, OG48K_RESIZE)]
+               + [(0x0C, 1616), (0x10, 908), (0x20, 1608), (0x28, 904)]    # the preview, as U48K's
+               # the crop-window fields stock's crop steps set (p2079: 42 / 1296 / 2190), tuned live
+               # (camera r20, test 2): +0xD8 = the preview's width, +0xE0 = the read's height -- the
+               # bands at the top and bottom gone; the picture still squeezed (ISSUES.md 2)
+               + [(0xA4, 42), (0xD8, 1616), (0xE0, 2174)],
+    canvas_pb=[],
+    rate_canvas=[],
+    row_text='UHDC 3840x2160', summary='UHDC',
+    bit_depths=(8, 10, 12),
+)
+
 
 def check(image, target):
     """the static facts this file rests on, against the fp L image"""

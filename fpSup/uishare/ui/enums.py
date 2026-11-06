@@ -23,6 +23,7 @@ RESOLUTION = {
     'UHDX': 11,         # fp L diagnostic: stock UHD under a new name, res-custom fpl_formats.py
     'W48K': 12,         # fp L full-width 2.81:1 band (4768x1680, IMX455 mode 188), res-custom fpl_formats.py
     'U48K': 13,         # fp L full-width 16:9 (4768x2672, IMX455 mode 155), res-custom fpl_formats.py
+    'UHDC': 14,         # fp L UHD 1:1 from the 1.52x crop read (3840x2160, IMX455 mode 196), res-custom fpl_formats.py
 }
 STOCK = {'FHD', 'UHD'}
 UIS_RES_ENUM_BASE = 0x4D4E4500          # claim_res id = base + value ("\0ENM" + value)

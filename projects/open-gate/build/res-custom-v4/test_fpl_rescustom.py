@@ -76,9 +76,9 @@ class FplBuildTests(unittest.TestCase):
 
     def test_the_formats_ship(self):
         """OG4K and OG48K; not UHDX (stock UHD under a new name would take every UHD-sized key, ogc_name)"""
-        self.assertEqual(self.f['formats'], ['og4k', 'og48k', 'w48k', 'u48k'])
+        self.assertEqual(self.f['formats'], ['og4k', 'og48k', 'w48k', 'u48k', 'uhdc'])
         self.assertEqual(sorted(p.name for p in (self.out / 'RESCUS').iterdir()),
-                         ['OG48K.RCD', 'OG4K.RCD', 'U48K.RCD', 'W48K.RCD'])
+                         ['OG48K.RCD', 'OG4K.RCD', 'U48K.RCD', 'UHDC.RCD', 'W48K.RCD'])
 
     def test_og4k_rides_on_mode_98(self):
         import rcd
@@ -343,12 +343,77 @@ class FplBuildTests(unittest.TestCase):
         for p in sorted((self.out / 'RESCUS').iterdir()):
             d = rcd.decode(p.read_bytes(), self.img, None)
             rec = dict(d['canvas_rec'])
-            pw, ph = rec.get(0x0C, 1288), rec.get(0x10, 724)
-            self.assertLessEqual(rec[0x00] / pw, F.PREVIEW_MAX_DOWN, p.name)
-            self.assertLessEqual(rec[0x04] / ph, F.PREVIEW_MAX_DOWN, p.name)
+            pw, ph = rec.get(0x0C, 1288), rec.get(0x10, 724)            # else the base p2061's
+            rw, rh = rec.get(0x00, 3856), rec.get(0x04, 2170)
+            self.assertLessEqual(rw / pw, F.PREVIEW_MAX_DOWN, p.name)
+            self.assertLessEqual(rh / ph, F.PREVIEW_MAX_DOWN, p.name)
             if p.name in ('U48K.RCD', 'W48K.RCD'):
                 self.assertEqual((rec[0x20], rec[0x28]), (pw - 8, ph - 4), p.name)
                 self.assertAlmostEqual(pw / ph, rec[0x00] / rec[0x04], delta=0.02, msg=p.name)
+
+    def test_uhdc_is_stock_uhd_cut_from_mode_196(self):
+        """UHDC: stock UHD's frame 1:1 from the middle of mode 196's 6288x2174 read; each stock rate
+        at SIGMA's own words (196..203); no playback pairs"""
+        import rcd
+        d = rcd.decode((self.out / 'RESCUS' / 'UHDC.RCD').read_bytes(), self.img, None)
+        self.assertEqual((d['profile'], d['act'], d['aspect'], d['flags'], d['canvas_pb']),
+                         (2061, (3840, 2160), 3, 0, []))
+        rec = dict(d['canvas_rec'])
+        self.assertEqual((rec[0xF4], rec[0xF8], rec[0x60], rec[0xD0]), (6288, 2174, 1023, 1023))
+        # the recording preview: U48K's 1616x908 (p2061's flashed, the crop step's froze; camera r17 / r18)
+        self.assertEqual((rec[0x0C], rec[0x10], rec[0x20], rec[0x28]), (1616, 908, 1608, 904))
+        # the crop window, tuned live (r20 test 2): +0xD8 the preview width, +0xE0 the read height
+        self.assertEqual((rec[0xA4], rec[0xD8], rec[0xE0]), (42, rec[0x0C], rec[0xF8]))
+        self.assertNotIn(0x00, rec)                                  # p2061's own 3856 x 2170
+        tt = {}
+        for i in range(85):
+            w = struct.unpack_from('<3I', self.img, 0xC0B90FF8 + 0x20 * i - 0xC0000000)
+            tt[w[0]] = w[1:]
+        stock = {2398: 203, 2400: 202, 2500: 201, 2997: 200, 4800: 198, 5000: 197, 5994: 196}
+        self.assertEqual({e['rank'] for e in d['entries']}, set(stock) | {1798})
+        for e in d['entries']:
+            self.assertEqual(e['donor'], 196)
+            if e['rank'] in stock:
+                self.assertEqual((e['w0'], e['w1']), tt[stock[e['rank']]], e['key'])
+
+    def test_name_skips_rows_without_playback_pairs(self):
+        """ogc_name (compiled from ogc.c on the host, OGC_FPL): a UHD-sized request with OG4K live gets
+        OG4K's label, not UHDC's (whose active size is stock UHD's but which has no playback pairs);
+        an OG4K-sized request still finds OG4K (playback)"""
+        import shutil
+        import ogc_layout as L
+        if not shutil.which('cc'):
+            self.skipTest('needs a host C compiler')
+        src = (HERE / 'ogc.c').read_text()
+        a = src.index('u32 ogc_name(u8 *S, u32 out, u32 sizes, u32 caller)')
+        fn = src[a:src.index('\n}\n', a) + 3]
+        S, ROWS, RS = 0x100, 0x400, L.ROW['SIZE']
+        c = ['#include <stdio.h>', '#include <stdint.h>', '#include <string.h>',
+             'typedef uint32_t u32; typedef uint8_t u8;', 'static u32 M[0x4000];',
+             '#define W(a) M[(a) >> 2]', '#define SW(S, o) W((u32)(uintptr_t)(S) + (o))',
+             '#define OGC_FPL 1', '#define KEYBLD 0xDEADu',
+             f'#define S_NROWS {L.S["NROWS"]}u', f'#define S_PBROW {L.S["PBROW"]}u',
+             f'#define S_FLAG {L.S["FLAG"]}u', f'#define S_CUR {L.S["CUR"]}u',
+             f'#define ROW_AW {L.ROW["AW"]}u', f'#define ROW_AH {L.ROW["AH"]}u',
+             f'#define ROW_PB {L.ROW["PB"]}u', f'#define ROW_LABEL {L.ROW["LABEL"]}u',
+             f'static u32 rowp(u8 *S, u32 r) {{ return (u32)(uintptr_t)S + {ROWS} + {RS} * r; }}',
+             'typedef u32 (*fw3)(u32, u32, u32);', 'static u32 emitted;',
+             'static u32 emit(u32 out, u32 lab, u32 n) { emitted = lab; return 0; }',
+             '#define EMIT ((uintptr_t)&emit)', fn,
+             'int main(void) {', f'  u8 *S = (u8 *)(uintptr_t){S}; u32 r0 = {S + ROWS}, r1 = r0 + {RS};',
+             '  SW(S, S_NROWS) = 2; SW(S, S_FLAG) = 1; SW(S, S_CUR) = 2;',
+             '  W(r0 + ROW_AW) = 3840; W(r0 + ROW_AH) = 2160; W(r0 + ROW_PB) = 0x800; W(0x100 + 0x800) = 0xFFFFFFFFu;',
+             '  W(r1 + ROW_AW) = 3840; W(r1 + ROW_AH) = 2552; W(r1 + ROW_PB) = 0x810; W(0x100 + 0x810) = 0x0C;',
+             '  u32 sz = 0x3000; W(sz + 8) = 3840; W(sz + 12) = 2160;',
+             '  ogc_name(S, 0, sz, 0); printf("%u %u\\n", emitted == r1 + ROW_LABEL, SW(S, S_PBROW));',
+             '  W(sz + 12) = 2552; emitted = 0;',
+             '  ogc_name(S, 0, sz, 0); printf("%u %u\\n", emitted == r1 + ROW_LABEL, SW(S, S_PBROW));',
+             '  return 0; }']
+        with tempfile.TemporaryDirectory() as td:
+            (pathlib.Path(td) / 'n.c').write_text('\n'.join(c))
+            subprocess.run(['cc', '-O1', '-w', '-o', td + '/n', td + '/n.c'], check=True)
+            out = subprocess.run([td + '/n'], capture_output=True, text=True).stdout.split()
+        self.assertEqual(out, ['1', '0', '1', '2'])
 
     def test_og4k_resize_is_stock_p2001s(self):
         """canvas +0x60/+0x64/+0xD0/+0xD4: the read -> raster downscale x 1024.  OG4K reads mode 98's

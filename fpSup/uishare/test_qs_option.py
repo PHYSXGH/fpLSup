@@ -431,7 +431,7 @@ class TestEnumTable(unittest.TestCase):
         from ui import enums
         self.assertEqual(enums.RESOLUTION, {'FHD': 2, 'UHD': 3, 'OG3K': 4, 'S16': 5, 'OG2K': 7,
                                             'OG4K': 8, 'OG3.5K': 9, 'OG48K': 10, 'UHDX': 11,
-                                        'W48K': 12, 'U48K': 13})
+                                        'W48K': 12, 'U48K': 13, 'UHDC': 14})
 
     def test_build_refuses_unlisted_or_wrong_values(self):
         from ui import enums

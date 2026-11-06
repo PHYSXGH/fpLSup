@@ -1260,8 +1260,15 @@ u32 ogc_name(u8 *S, u32 out, u32 sizes, u32 caller)
     u32 w = W(sizes + 8), h = W(sizes + 0xC), r = 0xFFFFFFFFu;
     if (w) {
         u32 pb = 0;
-        for (u32 i = 0; i < SW(S, S_NROWS); i++)
+        for (u32 i = 0; i < SW(S, S_NROWS); i++) {
+#ifdef OGC_FPL
+            /* a row without playback pairs (UHDC: stock UHD's own frame) has nothing to show in
+             * playback, and its active size is a stock one: matching it would label every
+             * UHD-sized key with it (the UHDX lesson, RESCUSTOM_PORT.md) */
+            if (W((u32)(uintptr_t)S + W(rowp(S, i) + ROW_PB)) == 0xFFFFFFFFu) continue;
+#endif
             if (W(rowp(S, i) + ROW_AW) == w && W(rowp(S, i) + ROW_AH) == h) { pb = i + 1; break; }
+        }
         SW(S, S_PBROW) = pb;
         if (pb) r = pb - 1;
     }

@@ -702,3 +702,27 @@ shows (the user).
 OG48K, W48K, U48K), where before r16 it showed in none we tried. Not traced why (r16 changed only the
 U48K / W48K previews). For W48K a custom 2.81:1 guide marks the recorded band: the parked letterbox is
 covered for practical framing.
+
+## UHDC: stock UHD cut 1:1 from the 1.52x band (static, 2026-11-06)
+The user's choice: mode 196's 6288x2174 unbinned read, stock UHD's frame (3856x2170 / 3840x2160) cut
+1:1 from its middle (3840 of 9568 columns, ~2.5x crop), enum 14. Modes 196..203 share hmax 534: donor
+196, 23.98 / 24 / 25 / 29.97 / 48 / 50 / 59.94 at SIGMA's own words, plus 17.98 -- UHD at up to
+59.94 (stock UHD: 29.97). Canvas: p2061's but the read (+0xF4/+0xF8) and the 1:1 resize (1023), as
+stock's largest UHD crop step does from 8208x4320. No playback pairs (its clips are stock UHD size).
+Its active size IS stock UHD's, so ogc_name (fp L) now leaves rows without playback pairs out of
+the size match -- else every UHD-sized key would get its label (the UHDX lesson). Host-compiled test
+of ogc_name (mutation: without the guard UHDC takes OG4K's key). Live view: the stock 16:9 view of
+the whole sensor, not the crop. Card r17 (`cards/20261106-rescustom-uhdc-r17`): core `dd0ed74d…`,
+UHDC.RCD `2ba5a75f…`, the other four as r16. 5 of 6 slots in use.
+
+**UHDC on the camera (r17, 2026-11-06):** OCD05050500. A001_168 (23.98, 126 frames) and 169 (59.94, 24):
+3856x2170, clean ~2.5x-crop pictures; W48K 29.97 / 59.94 (166 / 167) and OG4K 29.97 (170) still right.
+But UHDC's live view flashed pink while recording -- although its preview is 2.99x / 3.00x (stock
+UHD's). Stock's crop steps (p2062 .. p2079 / p2019, 1:1 from 8208x4320) differ from the base p2061 in
++0x0C/+0x10 1296x730, +0xA4 42, +0xD8/+0xE0 1296/2190; UHDC inherited p2061's (0 there). Card r18
+gives UHDC those (fpl_formats.UHD_CROP_STEP): `cards/20261106-rescustom-uhdccrop-r18`, UHDC.RCD `19bba794…`. Correction (the user): the frame guides show in the
+16:9 formats (U48K, W48K, UHDC), NOT in the 3:2 OG formats (whose display box the core changes).
+**r18 on the camera (2026-11-06):** with the crop step's fields UHDC's recording live view froze on
+a pink-yellow-white frame of lines and shapes (A001_171 / 172 record fine). Those values are the
+8208x4320 read's, not 6288x2174's. Card r19: dropped; U48K's larger preview 1616x908 / 1608x904
+instead (2.39x below the frame; the user suspected the preview again).
