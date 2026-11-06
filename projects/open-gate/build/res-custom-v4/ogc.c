@@ -978,7 +978,7 @@ static int key_eq_crop(u32 ek, u32 key, u32 n)
 }
 
 /* crop100: the request's crop factor x 100 (100 = off), read by the shim */
-u32 ogc_pick(u8 *S, u32 table, u32 key, u32 crop100)
+u32 ogc_pick(u8 *S, u32 table, u32 key, u32 req)
 #else
 u32 ogc_pick(u8 *S, u32 table, u32 key)
 #endif
@@ -992,7 +992,7 @@ u32 ogc_pick(u8 *S, u32 table, u32 key)
     while (klen < 16 && B8(key + klen)) klen++;
 #ifdef OGC_FPL
     /* PROVISIONAL (port phase 3): every crop step above 1.00x counts as Crop Mode */
-    u32 crop = crop100 != 100u;
+    u32 crop100 = W(req + 0x48), crop = crop100 != 100u;
 #else
     /* "...CROP": the key of a Crop Mode recording (FUN_c043b828 appends it) */
     u32 crop = klen > 4 && B8(key + klen - 4) == 'C' && B8(key + klen - 3) == 'R'
@@ -1028,6 +1028,14 @@ u32 ogc_pick(u8 *S, u32 table, u32 key)
         irq_restore(s);
         SW(S, S_HITS)++;
         publish_aspect(S);
+#ifdef OGC_FPL
+        /* a format cut out of a wider read (UHDC): the camera's crop factor picks the still size
+         * the recording preview's area is placed by (0xC0B85048 table; ISSUES.md 2) */
+        {
+            u32 c = W(rowp(S, W(e + ENT_ROW)) + ROW_CROP100);
+            if (c) W(req + 0x48) = c;
+        }
+#endif
         return e;
     }
     /* A key with one of our labels and no entry (OG3K at 119.88): the picker
@@ -1790,13 +1798,21 @@ static u32 rcd_check(u8 *S, u32 f, u32 n)
         if (off < RCD_HDR || (off & 3) || ln > n - off || (fl & ~1u)) return WHY_SECTION;
         if ((typ < SEC_VMODES || typ > SEC_PACK) && typ != SEC_STANDBY && typ != SEC_MODES
             && typ != SEC_RATECANVAS && typ != SEC_BINFILT && typ != SEC_CAPTURE_TIMING
-            && typ != SEC_BITDEPTH) {
+            && typ != SEC_BITDEPTH
+#ifdef OGC_FPL
+            && typ != SEC_CROP
+#endif
+            ) {
             if (fl & 1u) return WHY_UNKNOWN;
             continue;
         }
         if (seen & (1u << typ)) return WHY_SECTION;
         if (typ == SEC_CAPTURE_TIMING && fl != 1u) return WHY_ENTRY;
         if (typ == SEC_BITDEPTH && fl != 1u) return WHY_BITDEPTH;
+#ifdef OGC_FPL
+        if (typ == SEC_CROP && (fl != 1u || ln != 4u || W(f + off) < 100u || W(f + off) > 1000u))
+            return WHY_FIELD;
+#endif
         seen |= 1u << typ;
     }
     u32 need = 1u << SEC_MODES | 1u << SEC_CANVAS | 1u << SEC_UI | 1u << SEC_PACK;
@@ -2102,6 +2118,10 @@ static u32 fill_s(u8 *S, u32 n)
         W(row + ROW_MAXRATE) = W(f + RH_MAXRATE);
         u32 bits = sec(f, SEC_BITDEPTH, &ln);
         W(row + ROW_BITMASK) = bits ? W(bits) : 0;
+#ifdef OGC_FPL
+        u32 cr = sec(f, SEC_CROP, &ln);
+        W(row + ROW_CROP100) = cr ? W(cr) : 0;
+#endif
         u32 bf = sec(f, SEC_BINFILT, &ln);
         SW(S, S_BINFILT + 4*r) = bf ? 0x800u | W(bf+8) | (W(bf+12)<<4) |
             (W(bf+16)<<8) | ((W(bf)==3u)<<9) | ((W(bf+4)==3u)<<10) : 0;

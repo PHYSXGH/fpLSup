@@ -185,7 +185,7 @@ picker_replay:
     push    {r0, r1, r2, r3, r4, lr}
     mov     r2, r1
     mov     r1, #\tab
-    ldr     r3, [r6, #0x48]
+    mov     r3, r6                      @ the request (ogc_pick reads +0x48, may write it)
     CALLC   FN_PICK
     cmp     r0, #0
     beq     1f

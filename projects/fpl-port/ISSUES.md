@@ -9,7 +9,7 @@ and LOADER_V4.md (loader); each entry names the card it was seen on. Newest firs
    Reported as a separate issue; details still to collect (which names: the menu row, the Quick Set
    tile, the live-view label; and whether they appear after a resolution change or a menu visit).
 
-2. **UHDC: the live view while recording is squeezed horizontally** (things look too tall).
+2. **UHDC: the live view while recording is squeezed horizontally** (things look ~1.2x too tall). Parked.
    Recording itself is fine (A001_168 .. 172). The preview seems to take the whole 6288-wide read
    instead of the middle 3856 columns (a 1.63x squeeze matches what the user sees).
    - r17: p2061's preview (1288x724): flashing pink garbage.
@@ -36,9 +36,44 @@ and LOADER_V4.md (loader); each entry names the card it was seen on. Newest firs
      (FUN_c02d8c10 / c02d9008, settings snapshots) and a still-capture routine (FUN_c037b500).
      The canvas is copied into other structures before the preview is set up, so the consumer
      does not use these offsets: a static search by offset does not reach it.
-   - Next: dynamic. At record start, snapshot what the canvas is copied into, for stock FHD
-     (p2100: the same 6288x2174 read, a correct preview) and for UHDC, diff, and find the field
-     the preview's source area comes from.
+   - Dynamic diff (2026-11-06, tools/probe/recdump.py: RAM dumped through the uncached alias the
+     moment the movie-recording flag 0xC347ED4C+0x157 sets): UHDC (card r21) vs stock UHD in Crop
+     Mode's largest step (p2079-like, 1:1 3856x2170 from 8208x4320, correct preview). The recording
+     set-up at 0xC31DD95C.. holds +0xD0/+0xD4, +0xD8/+0xE0, the preview sizes, the read size --
+     identical layout, our values -- and two words that differ in kind:
+
+     | | UHDC | stock crop |
+     |---|---|---|
+     | 0xC31DD95C | -3232 = 6288 - 9520 | 4368 = 8208 - 3840 |
+     | 0xC31DD960 | -4154 = 2174 - 6328 | 1768 = 4320 - 2552 |
+
+     The subtracted size is a still-photo size from the table at 0xC0B85048.. ({size class 0..4,
+     aspect 1..8, w, h}; FUN_c02df5d0 / c02df7e0): class 3 3:2 (3840x2552) for the stock crop step,
+     class 0 3:2 (9520x6328) for UHDC -- by the crop factor (9520 / 2.48 = 3840). UHDC is a 2.48x
+     crop the camera believes is 1.00, so the preview window offsets go negative: the squeeze.
+   - Next: the core writes a format's declared crop factor (UHDC: 248) into the recording request
+     (+0x48, crop x 100, which the picker hooks already read) after picking the entry, so the
+     firmware derives class 3 as for its own crop step. A hypothesis: to test on the camera.
+   - Built (card r22, `cards/20261106-rescustom-uhdccropf-r22`): RCD section SEC_CROP = 14
+     (required, u32 crop x 100, 100..1000; fp L only), ROW.CROP100 (+0x7C, fp L rows 0x80); the
+     pick shims pass the request (r6) and ogc_pick writes the row's factor to +0x48 after a pick.
+     UHDC declares 248. Core `2d6f1198…`, UHDC.RCD `a107d75f…`; the other formats unchanged; fp
+     core 7b575c72. Tests: decoding, an emulated boot accepting UHDC.RCD (mutation: a broken
+     section check refuses it).
+   - **r22 on the camera (2026-11-06): no garbage, still squeezed;** recording unchanged
+     (A001_185 .. 187). Next: dump at record again (recdump.py) -- if 0xC31DD95C/960 now read
+     6288 - 3840 / ..., the factor reaches the computation and something else is off; if still
+     -3232 / -4154, the size class does not come from the request's +0x48 (or is taken earlier).
+   - Dump with r22: the offsets are now **2448 / -378** (6288 - 3840, 2174 - 2552): the crop factor
+     does reach the computation. The subtracted size looks like the full photo size divided by the
+     crop factor (9520 / 2.48 = 3840, 6328 / 2.48 = 2552), always 3:2. With the camera's still
+     aspect set to 16:9: unchanged (2448 / -378), still squeezed -- the still setting does not feed it.
+   - The user: things look about **1.2x too tall**. 2552 / 2174 = 1.17: the preview seems to take the
+     2174 lines it gets as a 2552-line (3:2) window and stretch them. No crop factor fits both axes
+     (3840 wide needs 2.48; 2174 lines needs >= 2.91, i.e. 3271 wide).
+   - **Parked (the user, 2026-11-06).** Card r22 stays (recording unchanged, saner offsets). Ideas
+     for later: find where the window height is taken from (the 2552) and give it the read's height;
+     or a UHDC read that is 3:2-shaped around the crop.
 
 3. **W48K: no letterboxed live view** (parked 2026-11-05). Rows that are not a stock live-view
    profile's break the LV pipeline. Workaround: a custom 2.81:1 frame guide.

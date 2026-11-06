@@ -154,7 +154,10 @@ ROW = dict(ENUM=0x00, PID=0x04, ASPECT=0x08, ON=0x0C, AW=0x10, AH=0x14,
 if FPL:
     # the live-view resolution label (fpl_formats LV_RECORDS): two string ids, the row's large and
     # medium label images (uia_apply STRBASE, like QSID)
-    ROW = dict(ROW, LVID=0x74, SIZE=0x7C)
+    ROW = dict(ROW, LVID=0x74,
+               CROP100=0x7C,     # the data file's crop factor x 100 (SEC_CROP; 0 = none): written into
+                                 # the recording request (+0x48) after a pick (ogc_pick)
+               SIZE=0x80)
 # §12/§14: the BIN settings area, file (and block) +32, CFG_BYTES long.  The
 # record names formats by LABEL, never by row or value.  Version 1:
 CFG = dict(MAGIC=0x00, VERSION=0x04, FLAGS=0x08, SEL=0x0C,   # SEL: 8-byte label, 0 = stock
@@ -247,6 +250,8 @@ SEC_MODES, SEC_RATECANVAS = 9, 10       # v3: the modes; canvas pairs per rate (
 SEC_BINFILT = 11                       # {h taps, v taps, h kernel, v kernel, soft/std}
 SEC_CAPTURE_TIMING = 12                 # required: per-carrier {rank, crop, w0, w1, engine, nominal}
 SEC_BITDEPTH = 13                       # required u32 mask: bit 0 = 8, 1 = 10, 2 = 12
+SEC_CROP = 14                           # fp L, required: u32 crop factor x 100 (100..1000) -- a format cut out
+                                        # of a wider read tells the camera so (UHDC 248: the preview's area)
 BIT_DEPTHS = (8, 10, 12)                 # native menu order, not a storage policy
 RCD_VERSIONS = (3,)                     # what this core reads (v1/v2 carried per-rate entries)
 RCD_MODE_BYTES = 20                     # donor, fastest rate (fps x 100), hmax, PAL hmax (0 = hmax), x
@@ -482,7 +487,7 @@ def header():
          'RCD_VERSION_MAX': RCD_VERSIONS[-1],
          'SEC_MODES': SEC_MODES, 'SEC_RATECANVAS': SEC_RATECANVAS, 'SEC_BINFILT': SEC_BINFILT,
          'SEC_CAPTURE_TIMING': SEC_CAPTURE_TIMING,
-         'SEC_BITDEPTH': SEC_BITDEPTH,
+         'SEC_BITDEPTH': SEC_BITDEPTH, 'SEC_CROP': SEC_CROP,
          'RCD_MODE_BYTES': RCD_MODE_BYTES,
          'RCD_MAX_MODES': RCD_MAX_MODES, 'MAX_GEN': MAX_GEN, 'NRATES': len(RATES), 'RCD_MAX_RCANVAS': RCD_MAX_RCANVAS, 'MIN_TAIL': MIN_TAIL,
          **{f'RATE_CYC{j}': r[3] for j, r in enumerate(RATES)},

@@ -247,6 +247,9 @@ ROWS['uhdc'] = dict(
                + [(0xA4, 42), (0xD8, 1616), (0xE0, 2174)],
     canvas_pb=[],
     rate_canvas=[],
+    # the camera's crop factor while UHDC records: its live view's area is placed by it (9568 / 3856
+    # = 2.48, stock's largest UHD crop step; ISSUES.md 2)
+    crop100=248,
     row_text='UHDC 3840x2160', summary='UHDC',
     bit_depths=(8, 10, 12),
 )

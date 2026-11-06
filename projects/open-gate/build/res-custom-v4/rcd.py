@@ -83,6 +83,11 @@ def encode(row, pack, version=None, mincore=None, extra=()):
     ui = row['row_text'].encode().ljust(L.RCD_UI_ROW, b'\0') + \
         row['summary'].encode().ljust(L.RCD_UI_SUM, b'\0')
     secs = [(L.SEC_MODES, 1, md), (L.SEC_CANVAS, 1, cv), (L.SEC_UI, 1, ui)]
+    if row.get('crop100'):
+        c = row['crop100']
+        if not L.FPL or not 100 <= c <= 1000:
+            raise RcdError('FIELD', 'crop factor')
+        secs.append((L.SEC_CROP, 1, struct.pack('<I', c)))
     if 'bit_depths' in row:
         depths = tuple(row['bit_depths'])
         if not depths or len(set(depths)) != len(depths) or any(d not in L.BIT_DEPTHS for d in depths):
@@ -202,7 +207,7 @@ def decode(data, image=None, stock_ids=None):
             raise RcdError('SECTION')
         if typ not in (L.SEC_MODES, L.SEC_VMODES, L.SEC_CANVAS, L.SEC_UI, L.SEC_PACK,
                        L.SEC_STANDBY, L.SEC_RATECANVAS, L.SEC_BINFILT, L.SEC_CAPTURE_TIMING,
-                       L.SEC_BITDEPTH):
+                       L.SEC_BITDEPTH) + ((L.SEC_CROP,) if L.FPL else ()):
             if flags & 1:
                 raise RcdError('UNKNOWN')
             continue
@@ -212,6 +217,8 @@ def decode(data, image=None, stock_ids=None):
             raise RcdError('ENTRY', 'sensor timing must be required')
         if typ == L.SEC_BITDEPTH and flags != 1:
             raise RcdError('BITDEPTH', 'bit-depth policy must be required')
+        if typ == L.SEC_CROP and (flags != 1 or ln != 4):
+            raise RcdError('FIELD', 'crop factor section')
         secs[typ] = (off, ln)
     for t in (L.SEC_MODES, L.SEC_CANVAS, L.SEC_UI, L.SEC_PACK):
         if t not in secs:
@@ -232,6 +239,12 @@ def decode(data, image=None, stock_ids=None):
             raise RcdError('ENTRY')
     if w(H['MAXRATE']) != max(m[1] for m in modes):
         raise RcdError('FIELD')
+    out['crop100'] = 0
+    if L.SEC_CROP in secs:
+        c = w(secs[L.SEC_CROP][0])
+        if not 100 <= c <= 1000:
+            raise RcdError('FIELD', 'crop factor')
+        out['crop100'] = c
     if L.SEC_BITDEPTH in secs:
         off, ln = secs[L.SEC_BITDEPTH]
         if w(H['MINCORE']) < 4 or ln != 4 or not 0 < w(off) < 8:

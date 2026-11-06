@@ -462,20 +462,20 @@ class FplBuildTests(unittest.TestCase):
         self.assertEqual(word(self.img, KEYBLD_FPL - 4), 0xE12FFF33)       # blx r3
         self.assertEqual(word(self.img, KEYBLD_FPL - 0x10), 0xE592300C)    # ldr r3, [r2, #0xc]
 
-    def boot(self, with_rcd):
+    def boot(self, with_rcd, rcd_name='OG4K.RCD'):
         sys.path.insert(0, str(ROOT / 'fpSup' / 'loader-v4'))
         if os.environ.get('FPSUP_CAMERA') != 'fpl':
             self.skipTest('the emulated boot runs the camera this process was started for (FPSUP_CAMERA=fpl)')
         import test_v4 as T4
         if T4.Uc is None:
             self.skipTest('needs unicorn')
-        rcdb = (self.out / 'RESCUS' / 'OG4K.RCD').read_bytes()
+        rcdb = (self.out / 'RESCUS' / rcd_name).read_bytes()
         files, dirs = T4.card((NAME, self.core), extra=[('RESCUS', 0x10, 0)])
         files['\\fpSup\\LOAD.LOG'] = b''
         dirs['\\fpSup\\RESCUS'] = []
         if with_rcd:
-            files['\\fpSup\\RESCUS\\OG4K.RCD'] = rcdb
-            dirs['\\fpSup\\RESCUS'] = [('OG4K.RCD', 0x20, len(rcdb))]
+            files['\\fpSup\\RESCUS\\' + rcd_name] = rcdb
+            dirs['\\fpSup\\RESCUS'] = [(rcd_name, 0x20, len(rcdb))]
         cam = T4.Camera(files, dirs)
         cam.boot()
         self.assertIsNone(cam.error)
@@ -543,6 +543,19 @@ class FplBuildTests(unittest.TestCase):
                 self.assertEqual(run(site, 217), 84)
                 self.assertEqual(run(site, 231), 0xFFFFFFFF)
                 self.assertEqual(run(site, 161), 26)
+
+    def test_uhdc_declares_its_crop_factor(self):
+        """UHDC carries SEC_CROP 248 (9568 / 3856: stock's largest UHD crop step), the others none; the
+        core boots with it and accepts the file (the section is required: a core without it refuses)"""
+        import rcd
+        import ogc_layout as L
+        for p in sorted((self.out / 'RESCUS').iterdir()):
+            d = rcd.decode(p.read_bytes(), self.img, None)
+            self.assertEqual(d['crop100'], 248 if p.name == 'UHDC.RCD' else 0, p.name)
+        src = (HERE / 'ogc.c').read_text()
+        self.assertIn('if (c) W(req + 0x48) = c;', src)
+        T4, log = self.boot(True, 'UHDC.RCD')
+        self.assertIn('OCD01010100', [t for c, _, _, t in log], log)
 
 if __name__ == '__main__':
     unittest.main()
