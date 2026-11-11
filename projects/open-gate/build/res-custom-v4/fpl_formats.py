@@ -161,15 +161,27 @@ PREVIEW_MAX_DOWN = 3.0
 W48K_RASTER = (4784, 1696)
 W48K_ACT = (4768, 1680)
 W48K_READ = (4784, 1700)
+W48K_LV = [([51], [(0x10, 693), (0x28, 683), (0xE0, 693)], 0),
+           ([1551], [(0x10, 698), (0x28, 688), (0xE0, 698)], 0),
+           ([1516], [(0x28, 488)], 0),
+           ([1481], [(0x28, 227)], 0),
+           ([1586, 1621, 1656, 1691, 1726], [(0x28, 683)], 0)]
 ROWS['w48k'] = dict(
     label='W48K', profile=OG4K_BASE, enum=12,                   # uishare ui/enums.py 'W48K'
-    stock_value=3, aspect=3, flags=0, video_base=True,
+    # aspect 5 (the still-size table's 9520x4080): the two aspect sites return it and the live
+    # view and recording view letterbox (camera 2026-11-11, RAM; 16:9 stretched the 2.81:1 band)
+    stock_value=3, aspect=5, flags=0, video_base=True,
     donor_timing=(188, 0x049C0244, 0x000E0816),                 # hmax 580 | tail 1180, vmax 2070 | x 14
     # each stock rate at SIGMA's own split of the frame (the solver's gives the same period, but more
     # lines and a shorter tail at 23.98 / 25 / 50 / 59.94): the timing words of modes 188..195
     capture_modes={2398: 195, 2400: 194, 2500: 193, 2997: 192, 4800: 190, 5000: 189, 5994: 188},
     rec=list(W48K_RASTER), act=list(W48K_ACT), prev_h=0,
     modes=[(188, 5994, 580, 0, 14)],
+    # live view (p51) and the focus / half-press views (LV_TWINS) show a window of their 1920-wide
+    # picture: stock 16:9 (p51 +0x28 1071, +0x10 / +0xE0 1081); drawn into aspect 5's letterbox it
+    # looked squashed (camera r30). Each window's height x (1920 / 1071) / (4784 / 1700) = 0.637:
+    # the 2.81:1 band W48K records (camera 2026-11-11, RAM: live view and focus view right).
+    standby=W48K_LV,
     canvas_rec=[(0x00, W48K_RASTER[0]), (0x04, W48K_RASTER[1]),
                 (0x24, W48K_ACT[0]), (0x2C, W48K_ACT[1]),
                 (0xDC, W48K_RASTER[0]), (0xE4, W48K_RASTER[1]),

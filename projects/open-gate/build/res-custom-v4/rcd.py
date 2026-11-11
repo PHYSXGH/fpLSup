@@ -192,7 +192,8 @@ def decode(data, image=None, stock_ids=None):
     raw, lab = lab, lab.split(b'\0')[0]
     if any(raw[len(lab):]) or not _text_ok(lab.decode('latin1'), 8, label=True):
         raise RcdError('FIELD', 'label')
-    if w(H['STOCK']) not in (2, 3) or w(H['ASPECT']) not in (2, 3, 9) or w(H['FLAGS']) & ~15 or \
+    aspects = (2, 3, 9) + ((5,) if L.FPL else ())            # fp L: 5 = letterboxed (ogc.c)
+    if w(H['STOCK']) not in (2, 3) or w(H['ASPECT']) not in aspects or w(H['FLAGS']) & ~15 or \
             (w(H['ASPECT']) == 9 and w(H['MINCORE']) < 2):
         raise RcdError('FIELD')
     if w(H['FLAGS']) & L.RFLAG_CROP and len(lab) > 6:       # label + "23_98CROP" fits 15

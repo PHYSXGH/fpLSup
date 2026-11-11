@@ -1784,6 +1784,11 @@ static u32 rcd_check(u8 *S, u32 f, u32 n)
     if (W(f + RH_SUM) != fnv(f + RCD_HDR, n - RCD_HDR)) return WHY_SUM;
     if (u8at(f + RH_LABEL + 7) || !text_ok(f + RH_LABEL, 8, 1)) return WHY_FIELD;
     u32 st = W(f + RH_STOCK), as = W(f + RH_ASPECT);
+#ifdef OGC_FPL
+    /* fp L: 5 = the still-size table's widest aspect (9520x4080). Returned by the two aspect
+     * sites, it letterboxes live view and the recording view (W48K, camera 2026-11-11). */
+    if (as == 5) as = 3;
+#endif
     if ((st != 2 && st != 3) || (as != 2 && as != 3 && as != 9)
         || (as == 9 && W(f + RH_MINCORE) < 2) || (W(f + RH_FLAGS) & ~15u))
         return WHY_FIELD;

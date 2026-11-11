@@ -300,7 +300,7 @@ class FplBuildTests(unittest.TestCase):
         import rcd
         d = rcd.decode((self.out / 'RESCUS' / 'W48K.RCD').read_bytes(), self.img, None)
         self.assertEqual((d['profile'], d['act'], d['aspect'], d['flags'], d['bit_depths']),
-                         (2061, (4768, 1680), 3, 0, (8, 10, 12)))
+                         (2061, (4768, 1680), 5, 0, (8, 10, 12)))  # 5: letterboxed (ogc.c)
         rec = dict(d['canvas_rec'])
         self.assertEqual((rec[0x00], rec[0x04], rec[0xF4], rec[0xF8], rec[0xFC], rec[0x60]),
                          (4784, 1696, 4784, 1700, 0x40000000, 1023))
@@ -557,6 +557,36 @@ class FplBuildTests(unittest.TestCase):
         src = (HERE / 'ogc.c').read_text()
         self.assertIn('if (c) W(req + 0x48) = c;', src)
         T4, log = self.boot(True, 'UHDC.RCD')
+        self.assertIn('OCD01010100', [t for c, _, _, t in log], log)
+
+    def test_w48k_letterboxed_aspect_is_accepted(self):
+        """W48K declares aspect 5 (letterboxed live view / recording view, camera 2026-11-11, RAM);
+        the fp L core boots with the file and accepts it (5 is outside the fp's 2 / 3 / 9)"""
+        import rcd
+        d = rcd.decode((self.out / 'RESCUS' / 'W48K.RCD').read_bytes(), self.img, None)
+        self.assertEqual(d['aspect'], 5)
+        others = {p.name: rcd.decode(p.read_bytes(), self.img, None)['aspect']
+                  for p in (self.out / 'RESCUS').iterdir() if p.name != 'W48K.RCD'}
+        self.assertNotIn(5, others.values(), others)
+        # live view (p51) and every focus / half-press view (LV_TWINS) show the recorded band: each
+        # stock 16:9 window's height scaled by (1920 / 1071) / (4784 / 1700)
+        import fpl_formats as F
+        sys.path.insert(0, str(ROOT / 'projects' / 'fpl-port' / 'tools'))
+        import canvas_compare as C
+        cols = C.columns(self.img, C.FPL['builder'])
+        mp = lambda p: word(self.img, C.FPL['mapping'] + 4 * p)
+        cv = lambda p, o: word(self.img, cols[o] + 4 * mp(p))
+        k = (1920 / 1071) / (4784 / 1700)
+        got = {}
+        for pids, pairs, _ in d['standby']:
+            for p in pids:
+                got[p] = dict(pairs)
+        self.assertEqual(sorted(got), sorted(v for v, _ in F.LV_TWINS))
+        for p, q in got.items():
+            self.assertLessEqual(abs(q[0x28] - cv(p, 0x28) * k), 1.0, p)
+            if 0xE0 in q:                                  # a profile with its own +0xE0 window
+                self.assertEqual((q[0x10], q[0xE0]), (q[0x28] + 10, q[0x28] + 10), p)
+        T4, log = self.boot(True, 'W48K.RCD')
         self.assertIn('OCD01010100', [t for c, _, _, t in log], log)
 
 if __name__ == '__main__':

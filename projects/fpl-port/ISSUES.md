@@ -8,6 +8,11 @@ and LOADER_V4.md (loader); each entry names the card it was seen on. Newest firs
 1. **The custom resolution names are not loaded at boot** (the user, 2026-11-06, card r19).
    Reported as a separate issue; details still to collect (which names: the menu row, the Quick Set
    tile, the live-view label; and whether they appear after a resolution change or a menu visit).
+   - Card r30 (2026-11-11, the user; noted, not acted on): after boot the **live-view screen's
+     resolution name reads "UHD"** although the custom resolution set before is still selected
+     (W48K: the view is letterboxed, so the row is live). Going into the menu and changing the custom
+     resolution fixes the name. So the live-view label is not re-published at boot (the core's lvpub
+     re-post / LV_Resolution) until a selection change.
 
 2. **UHDC: the live view while recording is squeezed horizontally** -- **fixed (card r29, 2026-11-06)**:
    the canvas +0xD8 / +0xE0 window, see the end of this entry.
@@ -147,8 +152,36 @@ and LOADER_V4.md (loader); each entry names the card it was seen on. Newest firs
      to work".** Card r29 (`cards/20261106-uhdcview-r29`, UHDC.RCD `bd31bdcd`; the other RCDs
      unchanged). The window offsets, crop factor, sensor read and binning were not it.
 
-3. **W48K: no letterboxed live view** (parked 2026-11-05). Rows that are not a stock live-view
-   profile's break the LV pipeline. Workaround: a custom 2.81:1 frame guide.
+3. **W48K: no letterboxed live view** (parked 2026-11-05) -- **fix built, card r30 (2026-11-11)**.
+   Rows that are not a stock live-view profile's break the LV pipeline; a custom 2.81:1 frame guide
+   was the workaround.
+   - The recording view: W48K's box is its read / 3 (1586 x 563, 2.82:1) with no window
+     (+0xD8/+0xE0 0), drawn into the 1616 x 572 preview and stretched to 16:9 (the user: stretched
+     vertically). RAM tests: a 16:9 buffer (1616 x 908, active 1608 x 568) -- still stretched; a
+     window taller than the box (+0xD8 1616, +0xE0 2724) -- froze, pink-white garbage (as UHDC's
+     overrun); the screen size (0xC31DF1E8 + 0x324/0x328, 1620 x 911 in live view, from the
+     display manager's plane via 0xC04288A8 / 0xC01D3250) -- rebuilt continuously.
+   - **The aspect code:** the core's two aspect sites (0xC0306EA0 / 0xC0306EEC, stock `mov r0,#3`)
+     return the row's aspect. RAM: W48K's row aspect and S.ASPECT := 5 (the still-size table's
+     9520x4080, the widest) -> the recording view letterboxed and right ("it's fine during
+     recording"), and live view letterboxed after the take (not after a format switch alone).
+   - Build: the core accepts aspect 5 on the fp L only (ogc.c, `#ifdef OGC_FPL`), rcd.py likewise,
+     W48K's row aspect 5. fp L core `ca8b5861`, W48K.RCD `8fdf0fdc` (the other RCDs unchanged); fp
+     core unchanged `7b575c72`. Tests 24/24; mutation: without the core line it refuses W48K.RCD.
+   - To check on the card: live view letterboxed from boot / format selection; the band's shape
+     (5 is 2.33:1 for stills -- does the view show W48K's 2.81:1 or 2.33:1?); the frame guide.
+   - **r30 on the camera (2026-11-11):** letterboxed from the start (boot, before any take). But the
+     live view while NOT recording looks **squashed vertically** inside the letterbox (the user;
+     noted, not acted on). Likely the stock live view's picture (mode 9, 3184x1276, 16:9 of the
+     sensor) drawn into the wider aspect-5 area instead of a 2.8:1 cut of it. The recording view's
+     shape on r30 is still to be confirmed.
+   - **Fixed (card r31):** live view's profile p51 shows a window of its 1920-wide picture: stock
+     +0x28 1071 / +0x10 1081 / +0xE0 1081 (16:9). RAM (p51's canvas, 0xC0C66C34 etc.): 683 / 693 /
+     693 = 2.81:1 -- "seems to be okay now". 683 / 1266 of live view's rows is the 3400-row band
+     W48K records (mode 188). The focus / half-press views (the other LV_TWINS: p1551, p1516, p1481,
+     p1586, p1621..p1726) were still squashed; each window height x 0.637 in RAM -- "it works now".
+     Baked in as five W48K standby groups (fpl_formats.W48K_LV, like the OG formats' LV32): W48K.RCD
+     `f73b5ea7`, core unchanged `ca8b5861`.
 
 4. **The frame guide does not show in the 3:2 formats** (OG4K, OG48K). It does show in the 16:9 ones
    (U48K, W48K, UHDC). Probably tied to the core's 3:2 display box change. Not traced.
@@ -158,8 +191,7 @@ and LOADER_V4.md (loader); each entry names the card it was seen on. Newest firs
    live view when OG4K / OG48K is selected, not over the whole 3:2 picture. Likely the same cause as
    4 (the overlays still use the 16:9 display box while the core's 3:2 box is shown).
 
-6. **W48K's recording preview:** r16 made it even (1616x572). Whether it now looks right while
-   recording has not been checked.
+6. **W48K's recording preview:** stretched to 16:9 (checked 2026-11-11) -- see 3, card r30.
 
 7. **Recording to an SSD is untested** with RES-Custom formats. The 1:1 formats need more than the SD
    card can write (OG48K ~365 MB/s at 23.98, W48K ~490 MB/s at 59.94, U48K ~385 MB/s at 29.97,
