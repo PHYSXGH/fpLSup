@@ -239,6 +239,17 @@ ROWS['u48k'] = dict(
 # No playback pairs: its clips are stock UHD size (and ogc_name leaves it out of the size match).
 # Live view: the stock 16:9 view of the whole sensor, not the crop (a frame guide marks it).
 UHDC_READ = (6288, 2174)
+# UHDC's live view = its recorded 2.5x crop (camera 2026-11-11, RAM: live view and focus views right):
+# live view (p51) and the focus views (LV_TWINS) show a window of their horizontally shrunk 3x5
+# picture (p51: box 1919 x 1266 for the whole 9552 x 6380 sensor); UHDC's 3840 x 2160 is 772 x 432
+# (each stock 16:9 window x 0.402), buffer +8 / +10 and +0xD8 / +0xE0 as stock Crop Mode's p69.
+# p69's own 3x3 / 1:1 recipe does not carry over: a profile does not switch live view's sensor mode.
+def _uhdc_lv(h):
+    return [(0x0C, 780), (0x10, h + 10), (0x20, 772), (0x28, h), (0xD8, 780), (0xE0, h + 10)]
+UHDC_LV = [([51, 1586, 1621, 1656, 1691, 1726], _uhdc_lv(432), 0),
+           ([1551], _uhdc_lv(434), 0),
+           ([1516], _uhdc_lv(308), 0),
+           ([1481], _uhdc_lv(144), 0)]
 # UHDC's recording live view: with p2061's preview (1288x724, 2.99x / 3.00x below its frame) it
 # flashed pink (camera, r17); with the stock crop step's fields (p2079: preview 1296x730, +0xA4 42,
 # +0xD8 / +0xE0 1296 / 2190) it froze on a garbage frame (r18) -- those are 8208x4320's, not this
@@ -265,6 +276,7 @@ ROWS['uhdc'] = dict(
     # the camera's crop factor while UHDC records: its live view's area is placed by it (9568 / 3856
     # = 2.48, stock's largest UHD crop step; ISSUES.md 2)
     crop100=248,
+    standby=UHDC_LV,
     row_text='UHDC 3840x2160', summary='UHDC',
     bit_depths=(8, 10, 12),
 )

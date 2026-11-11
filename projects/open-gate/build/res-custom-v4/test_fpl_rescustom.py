@@ -559,6 +559,27 @@ class FplBuildTests(unittest.TestCase):
         T4, log = self.boot(True, 'UHDC.RCD')
         self.assertIn('OCD01010100', [t for c, _, _, t in log], log)
 
+    def test_uhdc_live_view_is_the_recorded_crop(self):
+        """UHDC: live view and every focus view show its 3840 x 2160 (2.5x) crop -- each stock 16:9
+        window x 3840 / 9552 on both axes (camera 2026-11-11, RAM)"""
+        import rcd
+        import fpl_formats as F
+        sys.path.insert(0, str(ROOT / 'projects' / 'fpl-port' / 'tools'))
+        import canvas_compare as C
+        cols = C.columns(self.img, C.FPL['builder'])
+        mp = lambda p: word(self.img, C.FPL['mapping'] + 4 * p)
+        cv = lambda p, o: word(self.img, cols[o] + 4 * mp(p))
+        d = rcd.decode((self.out / 'RESCUS' / 'UHDC.RCD').read_bytes(), self.img, None)
+        got = {p: dict(q) for ps, q, _ in d['standby'] for p in ps}
+        self.assertEqual(sorted(got), sorted(v for v, _ in F.LV_TWINS))
+        k = 3840 / 9552
+        for p, q in got.items():
+            self.assertLessEqual(abs(q[0x20] - cv(p, 0x20) * k), 1.5, p)
+            self.assertLessEqual(abs(q[0x28] - cv(p, 0x28) * k), 2.0, p)
+            self.assertEqual((q[0x0C], q[0xD8], q[0x10], q[0xE0]),
+                             (q[0x20] + 8, q[0x20] + 8, q[0x28] + 10, q[0x28] + 10), p)
+        self.assertLessEqual(len(d['standby']), 8)
+
     def test_w48k_letterboxed_aspect_is_accepted(self):
         """W48K declares aspect 5 (letterboxed live view / recording view, camera 2026-11-11, RAM);
         the fp L core boots with the file and accepts it (5 is outside the fp's 2 / 3 / 9)"""

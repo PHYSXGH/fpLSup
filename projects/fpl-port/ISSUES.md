@@ -152,6 +152,16 @@ and LOADER_V4.md (loader); each entry names the card it was seen on. Newest firs
      to work".** Card r29 (`cards/20261106-uhdcview-r29`, UHDC.RCD `bd31bdcd`; the other RCDs
      unchanged). The window offsets, crop factor, sensor read and binning were not it.
 
+2a. **UHDC: live view shows the recorded 2.5x crop (2026-11-11; card r32, UHDC.RCD `ae12d1b5`).** Live view
+   (p51) and the focus views (the LV_TWINS) get a 772 x 432 window (UHDC's 3840 x 2160 of the
+   sensor) from live view's horizontally shrunk 3x5 picture (box 1919 x 1266): buffer 780 x 442,
+   +0xD8 780, +0xE0 442 (focus views: their 16:9 heights x 0.402). Copying the stock crop step's
+   live-view profile (p69: 3x3 readout, 1280 x 720 window at 1:1) does not work -- profiles do not
+   switch live view's sensor mode (the 3x5 rows were squashed 5/3); the scaler does not enlarge
+   (+0x64 614: no change). So the view is softer than stock Crop Mode's.
+   - **Noted, not acted on (the user):** the live view's magnify (zoom-in) does not zoom in as far as
+     it used to -- probably because it now starts from the already-cropped view.
+
 3. **W48K: no letterboxed live view** (parked 2026-11-05) -- **fix built, card r30 (2026-11-11)**.
    Rows that are not a stock live-view profile's break the LV pipeline; a custom 2.81:1 frame guide
    was the workaround.
