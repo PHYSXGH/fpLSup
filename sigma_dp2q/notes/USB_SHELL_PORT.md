@@ -53,21 +53,52 @@ and the `DALEPENA`-equivalent "endpoints now exist" gate all have to be found in
 This is what the fp's AutoRun loader card provides and the dp2q has **no proven equivalent of**. Per
 [`DEBUG_SURFACES.md`](DEBUG_SURFACES.md), the dp2q's non-destructive surfaces are:
 
-- **`S0:\Camfile.bin` read-and-apply** (`FUN_4007d278` / `FUN_4007d350`): up to 6 MB of card data read into
-  a RAM buffer and applied via `FUN_4007bc3e` / the STLASM path. This is a **data** injection surface; it
-  is *not* shown to run arbitrary ARM code, and how far it reaches is untraced. It is the best candidate but
-  unproven as code execution.
+- **`S0:\Camfile.bin` read-and-apply** (`FUN_4007d278` / `FUN_4007d350`): **traced end to end — it is a
+  persistent calibration writer, not code execution.** See below.
 - **UART Debug Terminal** (loader image only): a real REPL, but entered through the **crash/abort handler**
   (`FUN_4000856c`), and its runtime command table at `0x41000024` is empty in the static image — whether a
-  poke/call command exists is unknown. Not reachable over USB.
+  poke/call command exists is unknown. Nothing references `0x41000024` as a literal except the dispatcher,
+  so the registrar is **not statically recoverable**; resolving it needs a RAM dump from a running camera.
+  Not reachable over USB regardless.
 - The flash updater (`FUN_4009c226`, reads `S0:\DP2QVxxx.BIN` → DRAM `0x4e000000` → sub-controller
   programs flash) is persistent and brick-risky — the opposite of what the shell is for.
 
 Without a non-destructive code-execution path there is nowhere to install descriptor patches or a worker,
-so pillars 1 and 3 have no host. **Settle this before building anything.** Concretely: trace whether the
-Camfile.bin apply can be walked to a controlled call/branch, or find any debug-build hook that executes
-card-supplied code. If neither exists, a dp2q shell is not possible without flashing, and the honest
-conclusion is that the fp approach does not carry over.
+so pillars 1 and 3 have no host.
+
+#### Camfile.bin apply — traced (master 2.03, 2026-11-11)
+
+Decompiled the whole chain (`ghidra_scripts/DP2QDecomp.java`; cache in `out_dp2q/ghidra/decomp/camfile_*.c`):
+
+```
+FUN_4007d278  open S0:\Camfile.bin, read ≤0x600000 into *_DAT_4007d624 + 4, pad with 0xFF,
+              store size, then FUN_4007bc3e(2, buf)
+FUN_4007bc3e(mode=2, buf)
+  → FUN_4007bb90(2, &a,&b,&c)   a,b,c = { 0x400, 0x3400, 0x3000 }  ← HARDCODED by mode, not from the card
+  → FUN_4007baca(a=0x400, b=0x3400, c=0x3000, buf)
+FUN_4007baca   for each of two logical regions (a>>8, b>>8): FUN_401cd3c8(idx) looks up a logical→physical
+               block in a translation table (DAT_401cd1a0+idx*2), then FUN_4007ba34(region, len=0x3000, buf)
+FUN_4007ba34   writes buf in ≤0x100-sector runs via FUN_401cb460(dev=DAT_4007bda8, blk, count, src);
+               src advances by count*0x200 → 512-byte sectors on a block device (serial-flash/NAND FTL)
+```
+
+The STLASM variant (`FUN_4007d350` → `task_STLASM::FUN_4007d1ec`) only sets a "camfile present" flag
+(`FUN_40134f9e` builds queue objects; no buffer bytes become an address).
+
+**Verdict:** the card controls only the *payload bytes*. The destination (logical blocks 0x4 and 0x34, two
+0x3000-byte regions) is **fixed in firmware**, selected by the constant mode `2` — nothing parsed from the
+card becomes an address, a length, or a branch target. So this is a **persistent calibration-data writer**
+(the `CamCal.bin`/`CamSys.bin` regions), block-remapped through an FTL. It is **neither code execution nor
+volatile** — strictly worse than hoped for a shell bootstrap: you cannot run ARM code through it, and what
+it *does* write is persistent. Remove it from the injection candidate list.
+
+**Net: no non-destructive code-execution path exists in what is statically knowable.** Camfile is data +
+persistent; the UART poke/call surface is unrecoverable without hardware; the only code path is the
+brick-risky flash updater. Pillar 2 is therefore **not demonstrated feasible** — and it is the foundation,
+so as of today a dp2q USB shell on the fp model is **not feasible**. What could still change this (all need
+the camera in hand): a RAM dump that reveals a UART memory/call command; an engineering/service build with
+a card-code hook; or accepting a one-time flash of a minimal loader (persistent, brick-risky — a different
+risk class from the fp's disposable card, and off the table while there is no dp2q to recover a brick on).
 
 ### Pillar 3 — a command surface to drive: ❌ missing / unproven
 
@@ -83,7 +114,7 @@ this is less of a blocker than it looks, *if* pillar 2 gives us somewhere to run
 | pillar | fp mechanism | dp2q equivalent | status |
 |---|---|---|---|
 | 1. Transport | 7-word patch of PTP descriptors → 3 bulk pipes | PTP stack + MWUSB4 controller (`PTP_CAM`/`USB_PTP`, `0xC300_xxxx`) | ✅ target exists; descriptor table + EP gate not yet found |
-| 2. Run our code, no flash | AutoRun loader card + power-off write-back | none proven; `Camfile.bin` is data-only, UART is crash-only | ❌ **blocker** |
+| 2. Run our code, no flash | AutoRun loader card + power-off write-back | none; `Camfile.bin` **traced = persistent calibration writer** (not code), UART crash-only + registrar unrecoverable | ❌ **blocker, no path found** |
 | 3. Command surface | `shl` → firmware's own shell | UART terminal is loader-only/crash-only; worker could carry its own loop | ❌ needs pillar 2 first |
 
 ## Testability
@@ -95,9 +126,12 @@ proven pillar-2 path both exist.
 
 ## Next steps (in dependency order)
 
-1. **Resolve pillar 2.** Trace `FUN_4007bc3e` and the STLASM `FUN_4007d1ec` apply path end to end: does any
-   branch target come from card bytes? Separately, hunt for any debug/service hook that runs card-supplied
-   code. This gates the whole project — do it before any USB work. (Same as DEBUG_SURFACES §"Next steps".)
+1. **Pillar 2 (the gate) — Camfile path is now closed** (traced above: data-only, persistent, fixed
+   destination). The remaining pillar-2 leads all need the camera: (a) dump RAM at `0x41000024` on a running
+   loader build to recover the UART command table and check for a memory/call command; (b) look for an
+   engineering/service build with a card-code hook; (c) decide whether a one-time flash of a minimal loader
+   is acceptable (persistent, brick-risky). Until one of these lands, pillars 1 and 3 have no host — do not
+   invest in them first.
 2. **Map the PTP transport** (parallel-safe static work): find the configuration/endpoint descriptor table
    the PTP task emits, the per-speed `wMaxPacketSize` normaliser, and the MWUSB "endpoints enabled" status
    register (the `DALEPENA` analog) so a minimal "repurpose EP for a bulk IN/OUT" patch can be specified.
