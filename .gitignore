@@ -53,9 +53,10 @@ projects/imx410-lab/offline/bf_imx410_modes.csv
 # the actual firmware files
 firmware
 
-# unpacked firmware images (fp = out/, fp L = out_fpl/)
+# unpacked firmware images (fp = out/, fp L = out_fpl/, dp2 Quattro = out_dp2q/)
 out/
 out_fpl/
+out_dp2q/
 
 # LibreOffice lock files (a CSV open in Calc)
 .~lock.*#
