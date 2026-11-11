@@ -490,7 +490,21 @@ Not found in the image: lens distortion / vignetting tables by name (colour-shad
 
 ## 10. Open
 
+Host-reachable surfaces that do **not** touch flash (UART Debug Terminal, card files read-and-applied):
+[`DEBUG_SURFACES.md`](DEBUG_SURFACES.md). Summary: the loader has an interactive UART command shell
+(`TM>`), but it is entered mainly from the exception handler (crash console) and its command table is
+filled at runtime, so the command set — and thus whether it allows poke/call — is unknown without a RAM
+dump. `S0:\Camfile.bin` is read (≤6 MB) from the card and applied — now traced (2026-11-11) and **ruled out**
+as an injection/code surface: it is a persistent calibration writer to firmware-fixed logical blocks, the
+card controls only payload bytes. So **no non-destructive code-execution path is statically knowable**; the
+UART command set (needs a RAM dump) is the only remaining lead. USB-shell-port consequence:
+[`USB_SHELL_PORT.md`](USB_SHELL_PORT.md).
+
 - saving: how the three raw planes are encoded (upstream of the writer)
+- UART terminal command set: the table at RAM `0x41000024` is registered at runtime; the registrar was not
+  found statically (needs a RAM dump or a write-xref hunt) — see [`DEBUG_SURFACES.md`](DEBUG_SURFACES.md) §1
+- `S0:\Camfile.bin` apply path: traced (persistent calibration writer, not code) — only what *triggers* it
+  (service menu vs. automatic) is still open, and moot for injection — see [`DEBUG_SURFACES.md`](DEBUG_SURFACES.md) §2
 
 Blocked on material that is not in this update:
 - SD vendor regs 0x104/0x118/0x11C names: Socionext M7 SD host documentation or vendor source (not public)

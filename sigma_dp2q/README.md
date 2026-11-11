@@ -118,6 +118,10 @@ $G "$PWD" dp2q_master -process -noanalysis -readOnly -scriptPath $T/ghidra_scrip
 
 Arguments: addresses, function names, or `str:<text>` (every function referencing a string containing it).
 
+`DP2QCallers.java` lists the callers (function + from-address + reference type) of each address argument —
+useful for "how is this entered" questions. Host-reachable observation/injection surfaces (UART Debug
+Terminal, card files read-and-applied) are in [`notes/DEBUG_SURFACES.md`](notes/DEBUG_SURFACES.md).
+
 ### Data extraction
 
 ```
