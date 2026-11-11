@@ -112,12 +112,50 @@ A block of the image starting at **0x40C40628** (loader: 0x40C304F8, length 0x79
 The routine `cfg_create_kernel_objects` (runtime 0x01000984; loop at 0x01000A58) creates objects from tables in that block, in order,
 storing the IDs in BSS (0x4106xxxx) and spinning forever if a create fails:
 
-| table (runtime) | entries | record | created with |
-|---|---|---|---|
-| … | 3 | 20 B | code 0x804B0100 (wrapper 0x401BAD74) |
-| 0x010068FC | 39 | 16 B `{exinf, attr, dsname[8]}` | 0x80380100 — mailboxes (FS_IF, IMG_API, H264_IF, IM_PRC1–4, SND/RCV_REQ/RES, HDMISYC, SUBM, PTPCAMP, UI_DRAW, MOTOR, AF, AE, AWB…) |
-| **0x01006B6C** | **50** | 52 B T_CTSK | `tk_cre_tsk` — the task table below |
-| 0x01003BDC | 0xCB | 20 B | code 0x80490200 (wrapper 0x401BAD4C), not identified |
+| table (runtime) | entries | record | created with | objects |
+|---|---|---|---|---|
+| 0x01004BB8 | 191 | 24 B `{exinf, attr, isemcnt, maxsem, dsname[8]}` | 0x80280100 (0x401BAB08) | **semaphores**, one per peripheral channel: CA9PTMR, CA9GTMR, CA9WDOG, IPCEXC/IPCCNT, TMR32_0–9, USIO0–5, HDMAC00–07 / 10–17, XDMACP1/2, DZOOM, SPR0CH/1CH, IZA0/1, ADC0/1, TMR0/1, X0CH/X1CH, RAW, DCC_SND/RCV, JPEG, JPEGENC, JPEGXR, AUDIOIF, I2C0/1, PWM0, … |
+| 0x01005DA0 | 11 | 20 B `{exinf, attr, ceilpri, dsname[8]}` | 0x802D0100 (0x401BAB70) | **mutexes**: IM_CAPN, IM_CAP, IM_REST, DRFT_ST, IM_ENC, GUI_ST, MD_ST, MVCTRL, CAPTURE, KEY_TBL, KEY_STS |
+| 0x01005E7C | 87 | 20 B `{exinf, attr, iflgptn, dsname[8]}` | 0x80320100 (0x401C32D0) | **event flags**: SLDESHW, PR_PRCS, IM_PROC, …, SD0, SD1, NF, CF, FILESYS, H264, USB, USBLLD, HDMISYC, SBMICOM, PREPRO, STLCAP, DRAWBUF, … |
+| 0x01006548 | 37 | 24 B `{exinf, attr, mpfcnt, blfsz, dsname[8]}` | 0x80500100 (0x401BAE20) | **fixed-size memory pools** (count × block): the per-mailbox message pools (SUBM 4×0x20, STLIMG 16×0x20, STLASM 16×0x20, PRPRO_S 16×0x50, FS_MSG 16×0x444, …), IMG_API 32×0x400, DCF_DB 20000×0x14, … |
+| 0x010068C0 | 3 | 20 B `{exinf, attr, mplsz, dsname[8]}` | 0x804B0100 (0x401BAD74) | **variable-size memory pools**: FS 0x8AC00, EXIF 0xA000, UI_PRM 0x2000 |
+| 0x010068FC | 39 | 16 B `{exinf, attr, dsname[8]}` | 0x80380100 (0x401BAC28) | **mailboxes** (IDs at 0x4106317C; e.g. +0x38 SUBM, +0x40 STLIMG, +0x48 STLASM) |
+| **0x01006B6C** | **50** | 52 B T_CTSK | 0x80010100 `tk_cre_tsk` | **tasks** (IDs at 0x41062B90), below |
+| 0x01003BDC | 203 | 20 B `{intno − 32, intatr 1, handler, …}` | 0x80490200 (0x401BAD4C), called with (intno, &rest) | **interrupt handlers** for intno 32–251 (Cortex-A9 GIC shared interrupts): 126 distinct handlers, 77 numbers share a default handler (0x401A1F0C); each entry is a Thumb `bx pc` stub in SRAM (0x01000B80 + …) jumping to a small SRAM wrapper that calls the driver's handler |
+
+The ID arrays are BSS at 0x41062C58 (semaphores), 0x41062F54 (mutexes), 0x41062F80 (flags), 0x410630DC (fixed
+pools), 0x41063170 (variable pools), 0x4106317C (mailboxes), 0x41062B90 (tasks). The function codes are
+consistent with T-Kernel 1.x numbering (cre_sem 0x28, cre_mtx 0x2D, cre_flg 0x32, cre_mbx 0x38, def_int
+0x49, cre_mpl 0x4B, cre_mpf 0x50), each checked against the record layout it is given.
+
+Interrupt map (handler → driver module; "name" = the handler itself is named, "near" = nearest named
+function within 1 KB, a guess):
+
+| intno | handler | driver |
+|---|---|---|
+| 59, 62 | 0x400A947E, 0x400A88F8 | dd_ca9 (near) |
+| 96 | 0x400C251E | Im_PRO (near) |
+| 97, 98, 111, 121 | 0x400C2CC2, 0x400C2D70, 0x400C3EA2 | Im_SPR (near) |
+| 101 | 0x400CBD7C | Im_JPEGENC (near) |
+| 106–109 | 0x400B1DF4 | Im_DISP (near) |
+| 113 | 0x4010C236 | Im_B2Y (near) |
+| 118, 119 | 0x401244D2 | im_iza (name) |
+| 120 | 0x400C5556 | Im_DCC (near) |
+| 122 | 0x400B6BC6 | Im_Xch (near) |
+| 124–127, 236, 237 | 0x400AC040 | dd_udc (name) |
+| **128** | **0x4007BDB8** | **SD0 host** (the SDHCI interrupt handler, §7) |
+| 155, 156 | 0x400AD13A | dd_i2c (name) |
+| 157, 158 | 0x400AD742 | Dd_ADC (near) |
+| 160–161, 163–166, 233 | 0x400424FC | Dd_TMR32 (near) |
+| 168–173 | 0x400AFC98, 0x400AFD90 | dd_pwm (name) |
+| 175–182 | 0x400AE5AC | dd_hdmac0 (near), 8 channels |
+| 183–190 | 0x40046A44 | dd_hdmac1 (near), 8 channels |
+| 194–203, 238, 239 | 0x4004363E / 0x400435F4 alternating | dd_uart (name/near), 6 channels × 2 |
+| 224, 225 | 0x400AB25E | dd_ca9 (name) |
+| 228–231 | 0x400AA2BC | dd_xdmafasp (name) |
+| 100, 102, 112, 115–117, 134, 136–143, 162, 167, 204–206, 216, 222, 223, 232, 243, 247, 250, 251 | various | not labelled (136/137 "near Ui_Setup" is not credible) |
+
+The full list is generated into `out_dp2q/ghidra/irq_labels_master.tsv`.
 
 A further 10 system tasks (priorities 1–10, no names) are created at run time through a helper at
 0x400E48C0 (`create_task(start, entry, pri, stksz)`, tskatr 0x1001). Entries found from the call sites
@@ -208,7 +246,16 @@ SUBM task request handlers (table 0x4020DCF0, 10 entries; dispatcher near 0x4004
 | 9 | 0x4004C0E2 | load media info |
 
 Chunk 2 of the update has `CS` at 0x1FFC (followed by `1E 11`, probably a version): this confirms chunk 2
-is the SubM firmware. What the boot-mode values mean, and who asks for them, is not traced yet.
+is the SubM firmware.
+
+Request path: SUBM task main loop 0x4004C232 receives 0x1C-byte messages on mailbox `SUBM` (ID array
+0x4106317C + 0x38), request number at +8, reply buffer at +0x10, callback +0x14, sync object +0x18; on
+receive timeout it runs request 1 (poll). Senders: `FUN_4004C212` → `FUN_4004C1B8` (post); one wrapper per
+request, e.g. `FUN_40077784` = get boot mode (request 6, returns 1 byte), `FUN_400777A4` = get battery
+voltage (request 7; caller `FUN_4009B8FC` scales ×8/3 − 1428), `FUN_400777DA` = load media info (9).
+**Get boot mode is never called** in either build (master `FUN_40077784`, loader 0x40077108: no calls, no
+pointers; the one apparent caller at 0x405FB9C0 is data). Its values cannot be read from this firmware;
+if anything uses the SubM boot mode it is the earlier boot stage, which is not in this update.
 
 ## 7. SD card initialisation (master 2.03, static reading)
 
@@ -314,8 +361,11 @@ File-system media (`Fsc_Format(media)` 0x4007A30E; presence `FUN_400E1102(media)
 | 6 | `S1:\` SD channel 1 | GPIO pin 0x3C0, active low | stub (`FUN_400D7938` returns 0) |
 
 Every fixed file path in the firmware is on `S0:\`; `NF:\` and `CF:\` appear only as drive roots. The dp2
-Quattro has one SD slot and no CF slot: CF and SD1 are driver code shared with other models. Whether the
-camera mounts its NAND as `NF:` in normal use is not established.
+Quattro has one SD slot and no CF slot: CF and SD1 are driver code shared with other models. The active
+medium (byte 0x4101D5C4; per-medium write-protect at +1..+4) is set only by `Fsc_Start_Media(media)`
+(0x4007A4D6), `FUN_4007A54C` (register a medium's drive names) and a reset to 0; the medium number comes
+from file-system request messages. The UI text only ever mentions a memory card ("No memory card.",
+"Memory Card Format", …), no internal memory: `NF:` is not a user-facing medium on this camera.
 
 Second channel `SD1 (ch1)`: file-system media 6, drive `S1:\` (the card is media 2, `S0:\`). Presence =
 GPIO pin 0x3C0 active-low (word 0xD0002078 bit 0), debounced 5 reads 25 ms apart (`FUN_400E113A` /
@@ -326,10 +376,106 @@ Quattro has one card slot: this is code shared with other models, not a working 
 Read/write: `SD0_Send_Command17/18/24/25` (single/multi block read/write, DMA for 25) at
 0x40100DFE / 0x40100AF0 / 0x401017E8 / 0x401013D8, with `SD0_Err_Recovery` (CMD12 etc.) on errors.
 
-## 8. Open
+## 8. Still saving: X3F, X3I, JPEG, DNG
 
-- SD: names of vendor regs 0x104/0x118/0x11C (not public); whether NF: is mounted in normal use (`FUN_400E10CA`)
-- the 0x94–0xD0 header fields; what reads the headers (not in this update)
-- which of loader/master boots, and when (decided before either image runs); the SubM boot-mode values
-- the 3-entry and 203-entry config tables
-- checksum or signature of the update file (none found in the header, nor as a plain sum/CRC of chunks)
+Pipeline (master 2.03): **STLCAP** (capture control, 0x40086A58–0x400870A6) → **PREPRO** (send helper
+`FUN_40055D68`, 14 call sites in that module) → **PRPRO_S** (send helper `FUN_400583DE`, called from the PREPRO
+handlers at 0x40053844–0x4005554A; handler table 0x4020E430) → **STLIMG** → **STLASM** → file-system service →
+format writers.
+
+1. **Still pre-processing** (PRPRO_S handlers 6, 11, 12: `FUN_40058FF8`, `FUN_4005939A`, `FUN_400593E8`) posts to the **STLIMG** mailbox (`FUN_4005A3E6`, 0x14-byte messages, request at +8):
+   request 0/1/8 for normal shots, 5–9 chosen by shot-type flag bits (0x102, 0x10, 0x8000000, 0x4000000,
+   0xE0000000), 10 or 11 by the resolution-mode byte +0x1731 (4 or 0xF → 11).
+2. **STLIMG** (handler table 0x4020E47C, entries 0–11) does the image processing and posts to the **STLASM**
+   mailbox (`FUN_4005B1C8`, 0x18-byte messages). Handlers 0/1 choose the save: request **1** if the shot is
+   raw (`FUN_401314C4`), else **2** if the quality is DNG (`FUN_40131084`, "is qual DNG"), else **0**. Others
+   post 4, 5, 6, 7, 8, 9, 10.
+3. **STLASM** (task 0x4005B1F6, handler table 0x4020E4AC, 11 entries) saves:
+
+| STLASM request | handler | FS commands |
+|---|---|---|
+| 0 | `FUN_4005A702` | 0x39 JPEG |
+| 1 | `FUN_4005A8BA`: copies three metadata blocks (0xF1 @+0x2A2, 0xFB @+0x1A7, 0x360 @+0x393) into the per-shot parameter structure, builds the save descriptor | 0x37 X3F; quality byte +0x1736 = 3 → also 0x39 (RAW+JPEG); flag +0x1B → **0x38 X3I** instead |
+| 2 | `FUN_4005AB50`, same metadata steps | 0x82 DNG |
+
+4. **File-system service** (table 0x4020DDF0, 81 entries; command = index + 0x32; posted by `FUN_400F0A38` →
+   `FUN_400E1002`; one wrapper per command at 0x400F0A76–0x400F1DDC):
+
+| FS command / index | handler | save function | writers |
+|---|---|---|---|
+| 0x37 / 5 Save Raw (X3F) | `FUN_400790C6` | `FUN_401309DE` | mode 1 `FUN_4012D736`, 2/3 `FUN_4012DA04` |
+| 0x38 / 6 Save X3I | `FUN_400790FC` | `FUN_40130A74` | mode 1 `FUN_4012E334`, 2/3 `FUN_4012E38E` |
+| 0x39 / 7 Save Jpeg | `FUN_40079132` | `FUN_4012EB8A` | mode 1 `FUN_4012BFB4`, 2/3 `FUN_4012C200` |
+| 0x82 / 80 Save DNG | `FUN_40079890` | `FUN_40130B98` | mode 1 `FUN_4012DC4A` |
+
+Mode 3 = save, then copy (`Copy X3F/Jpeg/DNG` routines; `Copy X3I` (`FUN_40130B76`) only returns success for
+mode 3 and copies nothing). Raw saves refuse "APP1 SIZE OVER" when thumbnail + headers + 0x1B60 ≥ 64 KB
+(the embedded JPEG's EXIF). The per-shot parameter structure is the one whose fields sit 0x20 lower in the
+loader (§2).
+
+Format templates live in `.data` (image 0x40BD8674.. → RAM 0x41001470..), so code refers to RAM addresses.
+
+**X3F** (template RAM 0x410111B0 / image 0x40BE83B4; reached only from the X3F writers):
+
+| offset | block |
+|---|---|
+| 0x000 | `FOVb` header, version 4.1; filled by `FUN_400DCDFA`: image size **5424 × 3616** (0x1530 × 0xE20, Quattro top layer) or **2712 × 1808** when +0x1731 is 4 or 0xF; unique ID from `%08ld` of a counter (+0x16D0) and a date/time value; rotation 180/90/270 (0xB4/0x5A/0x10E) |
+| 0x5D0 | `SECi` v2.0, type 2, format 18: processed preview (JPEG) |
+| 0x5EC | `SECc` v2.0, type 5: CAMF, stored obfuscated (`X3FCamfile.cpp` has `FCEb` / `pDecrypt`), see below |
+| 0x628 | `SECi` v2.0, type 3, format 35 (0x23): the raw image: **three planes** (save descriptor pointers +0x20 / +0x24 / +0x28, sizes +0x60 / +0x64 / +0x68, each padded to 16 bytes), i.e. the Quattro's three sensor layers; the writer streams them as they are, so any encoding happens earlier in the pipeline (kernel objects `RAW`, `CP_RAW`) |
+| 0x688 | `SECd` v2.0 directory, 3 entries `IMA2`, `CAMF`, `IMA2` (offsets/lengths filled at write time) |
+
+X3F write order (`FUN_4012D736`): free-space check (sizes + 0x214C) → create file → header (`FUN_400DD628`
+fills the template) → a fixed 0x214C-byte block → section header, aligned to 32 → preview (+0x44, size +0x48,
+padded to 4) → raw section header → the three planes → directory.
+
+CAMF content: record template in the data area from 0x402A3424 (Sigma record types `CMbM` matrix ×144,
+`CMbP` property list ×9, `CMbT` text ×2). Matrix records include: CamsysVersion, ContentVersionNumber,
+SensorISO, SensorTemperature, SensorBoardTemperature, Capture{Aperture,Shutter,ExpTime,ExpComp,ISO},
+ExpEstimate, Bracket, Burst, CAMERAID, FPNSuppression, ImageDepth, RawOffset, TempGainFact, BadnessTable,
+BadClusterMargin, Despeckle/Highlight* thresholds, *ColorShadingRatio, *WBGain and *CCMatrix per light
+source (Sunlight, Shade, Overcast, Incandescent, Fluorescent, Flash, Auto, AutoLSP, Custom), ColorTemp*,
+CMCM_* / MultiAxisTable_* / CMCC_* per colour mode (Standard, Vivid, Neutral, Portrait, Landscape, FCBlue,
+FCYellow, Cinema, ForestGreen, SunsetRed, Monochrome), AF/AE/histogram data, denoise / slider sensitivities,
+EstimatedISO*, AutoTone*, sRGB multi-axis tables, KeepImageArea / ActiveImageArea / DarkShield* (twice).
+Property lists: IncludeBlocks, ColorShadingGainRatio, WhiteBalanceGains, WhiteBalanceColorCorrections,
+ColorModeCompensations, ColorModeMultiAxisTableCompensations, ColorModeContrastCompensations,
+InCameraMultiAxis; text: CamsettingsInfo. A converted camfile (`ConvCamfile_v022`) is looked up by PREPRO,
+STLIMG and StImChd during processing.
+
+**X3I** (template RAM 0x41011EC4 / image 0x40BE90C8; reached only from the X3I writer): the same layout, plus
+a `FOVi` info block and a `SECf` section with a frame list (14 `FRAM` slots; used by 0x400DDF9A,
+0x400DE45C, 0x400DE4A2): the multi-exposure container.
+
+**DNG** (template RAM 0x41014CB0 / image 0x40BEBEB4, used by 0x400DEE5A–0x400E0BAE): little-endian TIFF,
+**DNG 1.3.0.0** (backward 1.3).
+- IFD0 (43 tags): 8-bit JPEG preview (NewSubfileType 1, Compression 7, YCbCr), Make `SIGMA`, Model and
+  UniqueCameraModel `SIGMA dp2 Quattro`, Software `SIGMA dp2 Quattro ver%01d.%02d.%d.%04X`, Exif IFD,
+  3 SubIFDs, ColorMatrix1/2, ForwardMatrix1/2, AnalogBalance, AsShotNeutral, BaselineExposure (0),
+  BaselineNoise/Sharpness, LinearResponseLimit, ShadowScale, CalibrationIlluminant1/2 = 17 / 15, tag 0xC6F5
+  (6 values), ProfileName `Original`, ProfileToneCurve (129 points), ProfileEmbedPolicy.
+- SubIFD 0: the main image: NewSubfileType 0, uncompressed, **Photometric 34892 LinearRaw, 3 samples, 12
+  bits**, WhiteLevel 4095 ×3, BlackLevel (template 0), DefaultCrop, ActiveArea, AntiAliasStrength,
+  BestQualityScale.
+- SubIFDs 1, 2: 8-bit JPEG (YCbCr) previews with PreviewColorSpace.
+- **ColorMatrix1/2 are the standard sRGB→XYZ (D50) matrix** (0.4361 0.3851 0.1431 / 0.2225 0.7169 0.0606 /
+  0.0139 0.0971 0.7142) and **ForwardMatrix1/2 identity** (off-diagonals stored as 0/0). The five writer
+  functions fill AnalogBalance (1.0), AsShotNeutral, the tone curve, crop size and active area, but not the
+  matrices: the DNG carries camera-rendered linear RGB with fixed sRGB-based matrices; per-shot white
+  balance and tone curve only.
+- A second `II*` header in `.data` (RAM 0x4100DDA0) is not referenced at its start; likely the EXIF/TIFF
+  block inside JPEGs (not checked).
+
+## 9. Open
+
+- saving: how the three raw planes are encoded (upstream of the writer)
+
+Blocked on material that is not in this update:
+- SD vendor regs 0x104/0x118/0x11C names: Socionext M7 SD host documentation or vendor source (not public)
+- image-header fields 0x94–0xD0, which image boots, SubM boot-mode values: the first-stage boot code
+  (boot ROM / flash loader) or a flash dump
+- loader = previous version?: an older update file (DP2QV202.BIN or earlier)
+
+Not pursued: checksum or signature of the update file (none found in the header, nor as a plain sum/CRC
+of chunks).
+
