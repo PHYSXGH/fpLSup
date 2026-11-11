@@ -117,3 +117,15 @@ $G "$PWD" dp2q_master -process -noanalysis -readOnly -scriptPath $T/ghidra_scrip
 ```
 
 Arguments: addresses, function names, or `str:<text>` (every function referencing a string containing it).
+
+### Data extraction
+
+```
+python3 -I sigma_dp2q/tools/extract_strings.py     # UI messages, 17 languages -> out_dp2q/extract/strings/
+python3 -I sigma_dp2q/tools/extract_icons.py       # 797 icons -> out_dp2q/extract/icons/ (needs Pillow)
+python3 -I sigma_dp2q/tools/extract_camf.py        # CAMF records + X3F/X3I/DNG templates -> out_dp2q/extract/formats/
+python3 -I sigma_dp2q/tools/extract_curves.py      # tone/gamma curves -> out_dp2q/extract/curves/ (numpy, Pillow)
+python3 -I sigma_dp2q/tools/extract_images.py      # embedded JPEG/BMP (none on 2.03)
+```
+
+Formats and addresses: [`notes/FIRMWARE_MAP.md`](notes/FIRMWARE_MAP.md) §9.

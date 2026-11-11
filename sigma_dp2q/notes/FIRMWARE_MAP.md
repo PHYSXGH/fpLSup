@@ -466,7 +466,29 @@ a `FOVi` info block and a `SECf` section with a frame list (14 `FRAM` slots; use
 - A second `II*` header in `.data` (RAM 0x4100DDA0) is not referenced at its start; likely the EXIF/TIFF
   block inside JPEGs (not checked).
 
-## 9. Open
+## 9. Extracted data (master 2.03; tools in `tools/extract_*.py`, output in `out_dp2q/extract/`, ignored)
+
+| what | where in the image | tool | result |
+|---|---|---|---|
+| UI messages | pointer run 0x40BF53CC (.data → RAM 0x4101E1C8); per-language base list 0x4014CBD8 | `extract_strings.py` | 17 languages × 586 strings, UTF-8: en, ja, de, fr, es, it, zh-Hans, zh-Hant, ko, ru, nl, pl, pt, da, sv, no, fi; plus 332 untranslated strings (debug menu, apertures, shutter speeds) |
+| UI icons | table RAM 0x41051A80 / image 0x40C28C84, 12-byte entries {u8 format, u16 w, u16 h, u32 data}, IDs 1–797 | `extract_icons.py` | 797 PNGs + contact sheet. Pixels (draw code 0x4011E7CA): format 1 = 16 bpp nibbles **R \| A \| B \| G**; format 0 = 8 bpp, high nibble grey, low nibble alpha. Screen layer 640 × 480 × 16 bpp. Only 10 colour icons (hourglass, thermometer/warning, colour-adjust grid, SFD badge) |
+| CAMF records | 0x402A3424 | `extract_camf.py` | 146 records (`camf.json` / `camf.txt`). Real built-in values in 61: ImageDepth 14, RawOffset 2048, CAMERAID 81, `CamsettingsInfo` = "Camsettings-F23-DP2Quatro", BadnessTable, highlight / denoise parameters, colour-mode matrices and multi-axis tables (Vivid, Neutral, Cinema, …), contrast compensations, AutoToneGain (32 × 11), in-camera sRGB multi-axis set (`gausMACC_sRGB_MCK`: 1080 values, 1024 = 1.0). WB gains and CC matrices are identity placeholders, filled from the camera's calibration |
+| file templates | X3F 0x40BE83B4, X3I 0x40BE90C8, DNG 0x40BEBEB4 | `extract_camf.py` | binaries |
+| curves | data area | `extract_curves.py` | 32 monotonic u16 runs: two 2048-entry gamma-type curves (0x402C198E, used by FUN_4008F040), a 4096-entry log-like curve (0x402CAC3A, FUN_400CC3A8), R/G/B 256-entry expansion curves (0x40457408 …), identity ramps |
+| images | — | `extract_images.py` | none in standard formats: one BMP header template (0x402C4C14, debug screenshot header, no image behind it), an EXIF APP1 template (0x40BE4F98) |
+
+Fonts (not extracted): text is UTF-8; `FUN_4015A50E` (per character, via `Fontdrv_Font_Measure` 0x4015A9BC) routes by
+Unicode block: ASCII / Latin-1 / Cyrillic (0x400–0x4FF) / punctuation (0x2000–) / arrows (0x2190–) use blocks in the
+image (glyph blocks starting `02 00 31 02 03 00` at 0x407E0518, 0x407E9134, 0x407F1CD4, 0x4058C474, 0x4060BFDC, …;
+`BP4 ` metric blocks at 0x407E8A24, 0x407F15C4, 0x407FA18C, 0x40746320: 8-byte entries per character, first field the
+advance width, e.g. digits all 0x89); CJK symbols, kana and ideographs (0x4E00–0x9FFF, variant by UI language) come
+from RAM 0x6300A000–0x6306A400, loaded at run time from outside the image. Glyph data is compressed or
+outline-based in a custom format and was not decoded.
+
+Not found in the image: lens distortion / vignetting tables by name (colour-shading factors are calibration keys, e.g.
+`SunlightColorShadingFactorR`); the CJK fonts.
+
+## 10. Open
 
 - saving: how the three raw planes are encoded (upstream of the writer)
 
