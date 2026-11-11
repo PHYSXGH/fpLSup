@@ -280,7 +280,9 @@ SCR_STRUCTURE, SD_SPEC, DATA_STAT_AFTER_ERASE, SD_SECURITY, SD_BUS_WIDTHS, SD_SP
 3 = SD 3.0x (SD_SPEC 2 + SD_SPEC3), 2 = SD 2.00, 1 = SD 1.10, 0 = SD 1.0 (or forced 0 by a global flag).
 Then SCR byte 3 bit 0 (card supports CMD20, speed-class recording control) is cleared, except for SD 3.0x
 cards whose media-struct field 0x24 is > 14: CMD20 code exists (`CMD20 command error`) but is mostly not used.
-(Readers of byte 0x41 were not found: the struct is handed to the file-system layer as a pointer.)
+(Readers of byte 0x41: only three functions in the whole image load a byte at offset 0x41 — one on a stack
+local in task_AE, two field-by-field structure copies in task_BOOT (0x4016EFA2, 0x4016F3B8). No code was
+found that acts on the version; it may be unused or only read through such a copy.)
 
 Vendor registers, matched against Linux `sdhci_f_sdh30.h` / `sdhci-milbeaut.c` (Fujitsu/Socionext F_SDH30):
 
@@ -301,6 +303,20 @@ Enable* (0x3E bit 3); wait/clear 0x118 bit 0; check the 1.8 V bit stuck; SD cloc
 DAT[3:0] must read 1111. Same order as the SD spec; the Linux Milbeaut driver instead toggles
 `F_SDH30_IO_CONTROL2` (0x114) in software, so this host revision appears to sequence the switch itself.
 
+File-system media (`Fsc_Format(media)` 0x4007A30E; presence `FUN_400E1102(media)`, debounced by
+`FUN_400E113A`; the medium in use comes from `FUN_400E10CA`, not traced):
+
+| media | drive | presence | low-level driver |
+|---|---|---|---|
+| 2 | `S0:\` SD card | GPIO pin 0x180 (0xD0002030 bit 0) | full SD0 driver (above) |
+| 4 | `NF:\` NAND flash | always present | real: `MWNF_BasicInit` / `MWNF_Format` (`FUN_400D7986`), FTL with bad-block handling, ECC, retries; format uses `MDF_W_Qformat` |
+| 5 | `CF:\` CompactFlash | `FUN_401ECB08`: 0xD0002010 bits 3 and 4 both low (CD1/CD2-style, two active-low pins) | real: `MWCF_Init`, `MWCF_MBRFormat` (`FUN_400D7A46`), write cache |
+| 6 | `S1:\` SD channel 1 | GPIO pin 0x3C0, active low | stub (`FUN_400D7938` returns 0) |
+
+Every fixed file path in the firmware is on `S0:\`; `NF:\` and `CF:\` appear only as drive roots. The dp2
+Quattro has one SD slot and no CF slot: CF and SD1 are driver code shared with other models. Whether the
+camera mounts its NAND as `NF:` in normal use is not established.
+
 Second channel `SD1 (ch1)`: file-system media 6, drive `S1:\` (the card is media 2, `S0:\`). Presence =
 GPIO pin 0x3C0 active-low (word 0xD0002078 bit 0), debounced 5 reads 25 ms apart (`FUN_400E113A` /
 `FUN_400E1102`; media 2 = pin 0x180, 0xD0002030 bit 0). Its mount `FUN_40079FFA` is reached only from
@@ -312,7 +328,7 @@ Read/write: `SD0_Send_Command17/18/24/25` (single/multi block read/write, DMA fo
 
 ## 8. Open
 
-- SD: who reads the spec-version byte (0x41); names of vendor regs 0x104/0x118/0x11C; media 4 and 5
+- SD: names of vendor regs 0x104/0x118/0x11C (not public); whether NF: is mounted in normal use (`FUN_400E10CA`)
 - the 0x94–0xD0 header fields; what reads the headers (not in this update)
 - which of loader/master boots, and when (decided before either image runs); the SubM boot-mode values
 - the 3-entry and 203-entry config tables
